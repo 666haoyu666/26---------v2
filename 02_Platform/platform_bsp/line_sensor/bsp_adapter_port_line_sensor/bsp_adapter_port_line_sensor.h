@@ -12,7 +12,7 @@
 #include "bsp_wrapper_line_sensor.h"
 
 /**
- * @brief  装配八路灰度Driver并注册到循迹传感器Wrapper
+ * @brief  装配七路灰度Driver并注册到循迹传感器Wrapper
  * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM /
  *         PLATFORM_ERR_ALREADY_INIT
  * @note   本函数只做静态装配；硬件能力由bsp_lsensor_init()启动

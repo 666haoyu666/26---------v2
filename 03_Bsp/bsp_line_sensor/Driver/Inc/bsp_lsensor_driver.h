@@ -1,6 +1,6 @@
 /**
  * @file    bsp_lsensor_driver.h
- * @brief   八路二值灰度传感器组driver合同（单实例）
+ * @brief   七路二值灰度传感器组driver合同（单实例）
  * @note    - 单实例模块，无handler；由line_sensor的Adapter装配注入
  *          - 硬件访问经init注入的get_map获取，本头文件不见平台接口
  *          - 簇分析为纯计算内核（输入=归一后压线位图），PC可单测
@@ -13,7 +13,7 @@
 
 #include "platform_def.h"
 
-#define LSENSOR_DRV_SLOT_MAX (8U) /* 稳定物理槽位容量，与平台契约一致 */
+#define LSENSOR_DRV_SLOT_MAX (7U) /* 稳定物理槽位容量 */
 
 /** driver状态码，仅表达本次调用结果。 */
 typedef enum {
@@ -31,7 +31,7 @@ typedef enum {
     LSENSOR_DRV_AMBIGUOUS    /* 多簇不连续或全路命中 */
 } lsensor_drv_track_t;
 
-/** 注入的数据源：读一拍8路原始电平位图，位i=槽位i，1=高电平。 */
+/** 注入的数据源：读一拍7路原始电平位图，位i=槽位i，1=高电平。 */
 typedef lsensor_drv_status_t (*pf_lsensor_get_t)(uint8_t *raw_map);
 
 /** 驱动配置，init时整体拷贝持有；几何+极性+数据源。 */

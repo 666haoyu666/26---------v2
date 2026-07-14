@@ -11,12 +11,12 @@
 #include "main.h"
 #include "platform_def.h"
 
-/* 灰度输入组IDR掩码：PA0..PA7连续8路，bit i=PAi=槽位i */
+/* 灰度输入组IDR掩码：PA0..PA6连续7路，bit i=PAi=槽位i */
 #define IOGRP_LSENSOR_MASK                              \
     ((uint32_t)(PA0_LSENSOR_0_Pin | PA1_LSENSOR_1_Pin | \
                 PA2_LSENSOR_2_Pin | PA3_LSENSOR_3_Pin | \
                 PA4_LSENSOR_4_Pin | PA5_LSENSOR_5_Pin | \
-                PA6_LSENSOR_6_Pin | PA7_LSENSOR_7_Pin))
+                PA6_LSENSOR_6_Pin))
 
 #define IOGRP_LSENSOR_SHIFT (0U) /* 灰度组bit0在IDR中的位号 */
 
@@ -44,7 +44,7 @@ static const io_map_t s_io_map[] = {
 
 /** 输入组表，ID=下标：0对齐板级BOARD_LSENSOR_IOGROUP。 */
 static const iogroup_map_t s_iogroup_map[] = {
-    /* 0: 灰度组PA0..PA7 */
+    /* 0: 灰度组PA0..PA6 */
     { PA0_LSENSOR_0_GPIO_Port, IOGRP_LSENSOR_MASK,
       IOGRP_LSENSOR_SHIFT },
 };

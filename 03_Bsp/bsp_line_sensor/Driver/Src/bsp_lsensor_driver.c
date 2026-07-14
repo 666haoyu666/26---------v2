@@ -1,6 +1,6 @@
 /**
  * @file    bsp_lsensor_driver.c
- * @brief   八路二值灰度driver核心：注入取数、归一与簇分析
+ * @brief   七路二值灰度driver核心：注入取数、归一与簇分析
  * @note    - 单实例持只读cfg副本，无跨拍数据状态
  *          - 取数只走init注入的get_map，不触碰任何平台接口
  *          - 判定规则与几何规格见《灰度传感器模块设计》4.3

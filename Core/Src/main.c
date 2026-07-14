@@ -114,7 +114,7 @@ int main(void)
 		bsp_lsensor_result_t result;
 		bsp_lsensor_read(&result);
 		char tx_buf[128];
-		myprintf(tx_buf, 128, "lsensor offset: %.2f mm, track: %d\r\n", result.offset_mm, (uint8_t)result.track);
+		myprintf(tx_buf, 128, "lsensor offset: %.2f mm, track: %d, GPIOB->IDR: 0x%04X\r\n", result.offset_mm, (uint8_t)result.track, (uint16_t)GPIOB->IDR);
 		HAL_Delay(1000);
 	}
   /* USER CODE END 2 */

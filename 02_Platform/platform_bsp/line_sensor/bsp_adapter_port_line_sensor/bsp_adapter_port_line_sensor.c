@@ -1,6 +1,6 @@
 /**
  * @file    bsp_adapter_port_line_sensor.c
- * @brief   循迹传感器Adapter：绑定八路灰度Driver、板级映射与MCU输入组
+ * @brief   循迹传感器Adapter：绑定七路灰度Driver、板级映射与MCU输入组
  * @note    - 唯一知道器件型号、几何/极性参数和输入组接线的位置
  *          - 状态码与识别枚举的Driver->platform映射全部在本层完成
  *          - 读取失败时不修改输出，满足Wrapper契约
@@ -13,7 +13,11 @@
 #include "io_port.h"
 #include "platform_def.h"
 
-#define LSENSOR_RAW_MASK     (0x7FU) /* 八路原始电平有效位 */
+#define LSENSOR_RAW_MASK (0x7FU) /* 七路原始电平有效位 */
+
+/** 七路探头几何坐标，顺序对应PA0..PA6。 */
+static const float s_pos_mm[LSENSOR_DRV_SLOT_MAX] =
+    BOARD_LSENSOR_POSITIONS_MM;
 
 static lsensor_drv_status_t lsensor_get_map(uint8_t *raw_map);
 static platform_err_t lsensor_map_err(lsensor_drv_status_t status);
@@ -23,7 +27,7 @@ static platform_err_t lsensor_adp_read(bsp_lsensor_result_t *result);
 
 /**
  * @brief  将MCU输入组读取适配为driver原始位图回调
- * @param  raw_map 八路原始电平位图输出
+ * @param  raw_map 七路原始电平位图输出
  * @retval LSENSOR_DRV_OK / LSENSOR_DRV_ERR_PARAM / LSENSOR_DRV_ERR_IO
  */
 static lsensor_drv_status_t lsensor_get_map(uint8_t *raw_map)
@@ -77,7 +81,9 @@ static platform_err_t lsensor_adp_init(void)
     lsensor_drv_cfg_t cfg; /* 本次driver装配配置 */
     uint8_t           i;   /* 传感器槽位游标 */
 
-    cfg.positions_mm = BOARD_LSENSOR_POSITIONS_MM;
+    for (i = 0U; i < LSENSOR_DRV_SLOT_MAX; i++) {
+        cfg.positions_mm[i] = s_pos_mm[i];
+    }
     cfg.enabled_mask = (uint8_t)BOARD_LSENSOR_ENABLED_MASK;
     cfg.active_low   = (uint8_t)BOARD_LSENSOR_ACTIVE_LOW;
     cfg.get_map      = lsensor_get_map;
