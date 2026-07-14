@@ -1,0 +1,21 @@
+# Keil build products
+MDK-ARM/**/Objects/
+MDK-ARM/**/Listings/
+MDK-ARM/**/*.axf
+MDK-ARM/**/*.bin
+MDK-ARM/**/*.crf
+MDK-ARM/**/*.d
+MDK-ARM/**/*.dep
+MDK-ARM/**/*.hex
+MDK-ARM/**/*.htm
+MDK-ARM/**/*.lnp
+MDK-ARM/**/*.map
+MDK-ARM/**/*.o
+
+# Editor and OS files
+.vscode/
+.idea/
+*.bak
+*.tmp
+Thumbs.db
+
