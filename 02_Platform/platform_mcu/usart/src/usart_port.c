@@ -12,6 +12,8 @@
 #include "usart.h"
 
 
+#include "gpio.h"
+
 //#define UART_DEBUG 1
 
 #ifdef UART_DEBUG
@@ -125,17 +127,20 @@ static void core_usart_rx_error(en_core_usart_t id)
  */
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
 {
+    HAL_GPIO_WritePin(GPIOB ,GPIO_PIN_12 ,GPIO_PIN_SET);
     uint32_t i; /* 映射表游标 */
 
     for (i = 0U; i < (uint32_t)EN_CORE_USART_NUM; i++) {
         if (huart == s_usart_map[i]) {
             core_usart_rx_event((en_core_usart_t)i, size);
+						HAL_GPIO_WritePin(GPIOB ,GPIO_PIN_12 ,GPIO_PIN_RESET);
             return;
         }
     }
 #if UART_DEBUG
     myprintf(buf, 64, "HAL_UARTEx_RxEventCallback: unknown huart=%p, size=%u\n", huart, size);
 #endif
+		
 }
 
 /**
