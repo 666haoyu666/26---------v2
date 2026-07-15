@@ -1,7 +1,8 @@
 /**
  * @file    bsp_adapter_port_motor.h
  * @brief   电机能力Adapter注册入口，具体器件与板级绑定唯一落点
- * @note    - 由app_periph_init()在内核启动前调用，禁止阻塞
+ * @note    - 由app_periph_init()调用：先register挂ISR入口与设备表，
+ *            再经Wrapper群体drv_adapter_motor_init()初始化硬件
  *          - 公共头不暴露器件、HAL或RTOS类型
  */
 
@@ -11,10 +12,12 @@
 #include "bsp_wrapper_motor.h"
 
 /**
- * @brief  装配电机设备表并注册到Wrapper槽位
- * @retval MOTOR_DRV_OK / MOTOR_DRV_ERR_NOTREG / MOTOR_DRV_ERR_FAIL
- * @note   bsp_motor的driver/handler落地前无可绑定器件，
- *         恒返回MOTOR_DRV_ERR_NOTREG明示能力缺席
+ * @brief  装配A/B两轮电机设备表并注册到Wrapper槽位
+ * @retval MOTOR_DRV_OK / MOTOR_DRV_ERR_PARAM /
+ *         MOTOR_DRV_ERR_STATE(重复注册) / MOTOR_DRV_ERR_FAIL
+ * @note   仅注册节拍/编码器ISR入口与设备表，不触碰电机硬件；
+ *         硬件初始化由drv_adapter_motor_init()逐槽位执行，
+ *         初始化完成后电机处OFF态，start后才出力
  */
 motor_drv_status_t drv_adapter_motor_register(void);
 

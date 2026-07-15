@@ -69,7 +69,7 @@ void MX_GPIO_Init(void)
 
   /*Configure GPIO pins : PB4_E2B_Pin PB5_E2A_Pin PB6_E1B_Pin PB7_E1A_Pin */
   GPIO_InitStruct.Pin = PB4_E2B_Pin|PB5_E2A_Pin|PB6_E1B_Pin|PB7_E1A_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 

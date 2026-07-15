@@ -218,8 +218,6 @@ motor_status_t motor_driver_set_target_speed(
 {
     motor_status_t ret = MOTOR_OK;
 
-    float old_target;
-
     if (motor == NULL)
     {
 #ifdef DEBUG
@@ -236,10 +234,8 @@ motor_status_t motor_driver_set_target_speed(
         return MOTOR_ERROR;
     }
 
-    old_target = motor->target_speed_rps;
-
     /*
-     * 以下情况复位PID：
+     * 以下情况复位PID（启用时需先读取旧目标old_target）：
      * 1. 新目标为停止；
      * 2. 正转切换为反转；
      * 3. 反转切换为正转。

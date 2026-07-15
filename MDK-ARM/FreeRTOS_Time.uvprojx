@@ -577,6 +577,11 @@
               <FilePath>../03_Bsp/bsp_motor/Driver/Src/bsp_motor_driver.c</FilePath>
             </File>
             <File>
+              <FileName>encoder_motor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../03_Bsp/bsp_motor/Driver/Src/encoder_motor.c</FilePath>
+            </File>
+            <File>
               <FileName>bsp_motor_handler.c</FileName>
               <FileType>1</FileType>
               <FilePath>../03_Bsp/bsp_motor/handler/Src/bsp_motor_handler.c</FilePath>

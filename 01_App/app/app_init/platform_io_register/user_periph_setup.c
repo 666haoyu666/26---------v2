@@ -9,6 +9,7 @@
 
 #include "bsp_adapter_port_imu.h"
 #include "bsp_adapter_port_line_sensor.h"
+#include "bsp_adapter_port_motor.h"
 
 platform_err_t app_periph_init(void)
 {
@@ -34,6 +35,14 @@ platform_err_t app_periph_init(void)
         return err;
     }
 
-    /* motor能力：bsp_motor的driver落地后在此挂接其注册入口 */
+    /* 电机（A左/B右两轮）：注册设备表并初始化， */
+    /* 初始化后处OFF态不出力，起转由上层start触发 */
+    if (drv_adapter_motor_register() != MOTOR_DRV_OK) {
+        return PLATFORM_ERR_FAIL;
+    }
+    if (drv_adapter_motor_init() != MOTOR_DRV_OK) {
+        return PLATFORM_ERR_FAIL;
+    }
+
     return PLATFORM_ERR_OK;
 }

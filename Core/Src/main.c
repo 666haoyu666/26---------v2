@@ -28,8 +28,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
-
+#include "timer_port.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -193,7 +192,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-
+  if (htim->Instance == TIM9)
+  {
+    core_timer_isr_entry(EN_CORE_TIMER_CTRL_10MS); /* 10ms电机控制节拍分发 */
+  }
   /* USER CODE END Callback 1 */
 }
 

@@ -14,6 +14,7 @@
 
 #define MOTOR_DRV_MAX_NUM  (4U) /* 稳定物理电机槽位容量 */
 #define MOTOR_DRV_FLT_NONE (0U) /* fault_flags无故障基值 */
+#define MOTOR_DRV_FLT_HW   (1U << 0) /* 输出/控制硬件链路失败锁存 */
 
 /** wrapper状态码，仅表达本次调用结果。 */
 typedef enum {
