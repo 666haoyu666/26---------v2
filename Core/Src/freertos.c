@@ -27,8 +27,11 @@
 /* USER CODE BEGIN Includes */
 #include "user_periph_setup.h"
 
+#include "board_motor_config.h"
 #include "bsp_wrapper_motor.h"
 #include "myprintf.h"
+#include "service_diff_odom.h"
+#include "bsp_wrapper_imu.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -38,7 +41,10 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+/* Odom演示标定：轮径为占位值，实测后回填 */
+#define ODOM_DEMO_WHEEL_DIA_MM (65.0f)
+#define ODOM_DEMO_MM_TICK      (ODOM_DEMO_WHEEL_DIA_MM * 3.1415927f / \
+                                (float)BOARD_MOTOR_CPR)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -123,20 +129,42 @@ void StartDefaultTask(void *argument)
   {
     Error_Handler();
   }
+
   drv_adapter_motor_start();
   drv_adapter_motor_set_rps(0 ,5.0f);
   drv_adapter_motor_set_rps(1 ,5.0f);
+
+  /* 里程计装配：槽位对齐board_motor_config，标定值待实测回填 */
+  server_odom_cfg_t odom_cfg;
+  odom_cfg.left_id = BOARD_MOTOR_A_SLOT;
+  odom_cfg.right_id = BOARD_MOTOR_B_SLOT;
+  odom_cfg.left_mm_tick = ODOM_DEMO_MM_TICK;
+  odom_cfg.right_mm_tick = ODOM_DEMO_MM_TICK;
+  odom_cfg.left_sign = 1;
+  odom_cfg.right_sign = 1;
+  if (PLATFORM_IS_ERR(server_odom_init(&odom_cfg)))
+  {
+    Error_Handler();
+  }
+
+  
   
   char buf[128];
+
+  server_odom_state_t odom_state;
   for(;;)
   {
-    motor_drv_state_t state_a;
-    motor_drv_state_t state_b;
-    drv_adapter_motor_get_state(0 ,&state_a);
-    drv_adapter_motor_get_state(1 ,&state_b);
-
-    myprintf(buf, sizeof(buf), "A: %f, B: %f\r\n", state_a.rps, state_b.rps);
-    osDelay(1000);
+    float yaw_deg;
+    bsp_imu_data_t imu_data;
+    server_odom_get(&odom_state);
+    myprintf(buf, sizeof(buf), "x=%d, y=%d, yaw=%.2f, vx=%d, vy=%d, w=%.2f\r\n",
+             odom_state.x_mm,
+             odom_state.y_mm,
+             odom_state.yaw_deg,
+             odom_state.vx_mm_s,
+             odom_state.vy_mm_s,
+             odom_state.w_deg_s);
+    osDelay(100);
   }
   /* USER CODE END StartDefaultTask */
 }

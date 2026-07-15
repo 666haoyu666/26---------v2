@@ -11,7 +11,7 @@
 #include "platform_def.h"
 #include "usart.h"
 
-//#define UART_DEBUG 1
+#define UART_DEBUG 0
 
 #ifdef UART_DEBUG
 #include "myprintf.h"
@@ -125,6 +125,9 @@ static void core_usart_rx_error(en_core_usart_t id)
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
 {
     uint32_t i; /* 映射表游标 */
+#if UART_DEBUG
+    myprintf(buf, 64, "Rxsize=%u\n", size);
+#endif
 
     for (i = 0U; i < (uint32_t)EN_CORE_USART_NUM; i++) {
         if (huart == s_usart_map[i]) {
@@ -132,9 +135,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
             return;
         }
     }
-#if UART_DEBUG
-    myprintf(buf, 64, "HAL_UARTEx_RxEventCallback: unknown huart=%p, size=%u\n", huart, size);
-#endif
+
 		
 }
 
@@ -146,6 +147,9 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
     uint32_t i; /* 映射表游标 */
+#if UART_DEBUG
+    myprintf(buf, 64, "ErrorCallback\n");
+#endif
 
     for (i = 0U; i < (uint32_t)EN_CORE_USART_NUM; i++) {
         if (huart == s_usart_map[i]) {
@@ -153,7 +157,4 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
             return;
         }
     }
-#if UART_DEBUG
-    myprintf(buf, 64, "HAL_UART_ErrorCallback: unknown huart=%p\n", huart);
-#endif
 }
