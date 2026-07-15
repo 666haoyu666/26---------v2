@@ -20,6 +20,7 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "adc.h"
+#include "dma.h"
 #include "i2c.h"
 #include "tim.h"
 #include "usart.h"
@@ -27,10 +28,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "user_periph_setup.h"
 
-#include "bsp_wrapper_line_sensor.h"
-#include "myprintf.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -95,6 +94,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_ADC1_Init();
   MX_I2C1_Init();
   MX_TIM1_Init();
@@ -103,20 +103,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
-  /* 组合根：内核启动前注册全部BSP Adapter */
-  if (PLATFORM_IS_ERR(app_periph_init()))
-  {
-    Error_Handler();
-  }
-	
-	while(1)
-	{
-		bsp_lsensor_result_t result;
-		bsp_lsensor_read(&result);
-		char tx_buf[128];
-		myprintf(tx_buf, 128, "lsensor offset: %.2f mm, track: %d, GPIOB->IDR: 0x%04X\r\n", result.offset_mm, (uint8_t)result.track, (uint16_t)GPIOB->IDR);
-		HAL_Delay(1000);
-	}
+  
   /* USER CODE END 2 */
 
   /* Init scheduler */

@@ -2,12 +2,12 @@
  * @file    user_periph_setup.c
  * @brief   组合根：集中注册各BSP能力Adapter
  * @note    - 每完成一个BSP能力即在此挂接其注册入口
- *          - 内核启动前执行，注册函数不得阻塞等待OS资源  
- *          - 这里简单将初始化放在这里了，后续可考虑在OS任务中初始化
+ *          - 内核启动后执行 
  */
 
 #include "user_periph_setup.h"
 
+#include "bsp_adapter_port_imu.h"
 #include "bsp_adapter_port_line_sensor.h"
 
 platform_err_t app_periph_init(void)
@@ -20,6 +20,16 @@ platform_err_t app_periph_init(void)
         return err;
     }
     err = bsp_lsensor_init();
+    if (PLATFORM_IS_ERR(err)) {
+        return err;
+    }
+
+    /* IMU（维特WT系列）：注册并启动USART1 DMA空闲接收 */
+    err = bsp_imu_adp_reg();
+    if (PLATFORM_IS_ERR(err)) {
+        return err;
+    }
+    err = bsp_imu_init();
     if (PLATFORM_IS_ERR(err)) {
         return err;
     }

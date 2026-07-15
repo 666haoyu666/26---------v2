@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F411xE</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../01_App/app/app_init/platform_io_register;../01_App/app/app_init/user_task_config;../01_App/app/app_isr_handlers;../01_App/app/app_main;../01_App/app/app_tracking;../01_Service/service/service_motion;../01_Service/service/service_motion/platform/motor;../02_Config;../02_Platform/platform_common;../02_Platform/platform_bsp/line_sensor/bsp_wrapper_line_sensor;../02_Platform/platform_bsp/line_sensor/bsp_adapter_port_line_sensor;../02_Platform/platform_bsp/motor/bsp_wrapper_motor;../02_Platform/platform_bsp/motor/bsp_adapter_port_motor;../02_Platform/platform_os/inc;../02_Platform/platform_os/os_wrapper/inc;../02_Platform/platform_os/os_implementation/freertos/inc;../02_Platform/platform_mcu/gpio/inc;../02_Platform/platform_mcu/pwm/inc;../02_Platform/platform_mcu/encoder/inc;../02_Platform/platform_mcu/timer/inc;../03_Bsp/bsp_line_sensor/Driver/Inc;../03_Bsp/bsp_motor/Driver/Inc;../03_Bsp/bsp_motor/handler/Inc;../03_Middlewares/algorithm/pid;../99_Utils/common;../05_impl</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../01_App/app/app_init/platform_io_register;../01_App/app/app_init/user_task_config;../01_App/app/app_isr_handlers;../01_App/app/app_main;../01_App/app/app_tracking;../01_Service/service/service_motion;../01_Service/service/service_motion/platform/motor;../02_Config;../02_Platform/platform_common;../02_Platform/platform_bsp/line_sensor/bsp_wrapper_line_sensor;../02_Platform/platform_bsp/line_sensor/bsp_adapter_port_line_sensor;../02_Platform/platform_bsp/motor/bsp_wrapper_motor;../02_Platform/platform_bsp/motor/bsp_adapter_port_motor;../02_Platform/platform_os/inc;../02_Platform/platform_os/os_wrapper/inc;../02_Platform/platform_os/os_implementation/freertos/inc;../02_Platform/platform_mcu/gpio/inc;../02_Platform/platform_mcu/pwm/inc;../02_Platform/platform_mcu/encoder/inc;../02_Platform/platform_mcu/timer/inc;../03_Bsp/bsp_line_sensor/Driver/Inc;../03_Bsp/bsp_motor/Driver/Inc;../03_Bsp/bsp_motor/handler/Inc;../03_Bsp/bsp_imu/inc;../02_Platform/platform_bsp/imu/bsp_wrapper_imu;../02_Platform/platform_bsp/imu/bsp_adapter_port_imu;../02_Platform/platform_mcu/usart/inc;../03_Middlewares/algorithm/pid;../99_Utils/common;../05_impl</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -454,6 +454,16 @@
               <FileType>1</FileType>
               <FilePath>../02_Platform/platform_bsp/motor/bsp_adapter_port_motor/bsp_adapter_port_motor.c</FilePath>
             </File>
+            <File>
+              <FileName>bsp_wrapper_imu.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../02_Platform/platform_bsp/imu/bsp_wrapper_imu/bsp_wrapper_imu.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_adapter_port_imu.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../02_Platform/platform_bsp/imu/bsp_adapter_port_imu/bsp_adapter_port_imu.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -549,6 +559,11 @@
               <FileType>1</FileType>
               <FilePath>../02_Platform/platform_mcu/timer/src/timer_port.c</FilePath>
             </File>
+            <File>
+              <FileName>usart_port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../02_Platform/platform_mcu/usart/src/usart_port.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -568,6 +583,11 @@
               <FileName>bsp_motor_handler.c</FileName>
               <FileType>1</FileType>
               <FilePath>../03_Bsp/bsp_motor/handler/Src/bsp_motor_handler.c</FilePath>
+            </File>
+            <File>
+              <FileName>wt_imu.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../03_Bsp/bsp_imu/src/wt_imu.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -623,6 +643,62 @@
               <FileName>adc.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/adc.c</FilePath>
+            </File>
+            <File>
+              <FileName>dma.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/dma.c</FilePath>
+              <FileOption>
+                <CommonProperty>
+                  <UseCPPCompiler>2</UseCPPCompiler>
+                  <RVCTCodeConst>0</RVCTCodeConst>
+                  <RVCTZI>0</RVCTZI>
+                  <RVCTOtherData>0</RVCTOtherData>
+                  <ModuleSelection>0</ModuleSelection>
+                  <IncludeInBuild>1</IncludeInBuild>
+                  <AlwaysBuild>2</AlwaysBuild>
+                  <GenerateAssemblyFile>2</GenerateAssemblyFile>
+                  <AssembleAssemblyFile>2</AssembleAssemblyFile>
+                  <PublicsOnly>2</PublicsOnly>
+                  <StopOnExitCode>11</StopOnExitCode>
+                  <CustomArgument></CustomArgument>
+                  <IncludeLibraryModules></IncludeLibraryModules>
+                  <ComprImg>1</ComprImg>
+                </CommonProperty>
+                <FileArmAds>
+                  <Cads>
+                    <interw>2</interw>
+                    <Optim>0</Optim>
+                    <oTime>2</oTime>
+                    <SplitLS>2</SplitLS>
+                    <OneElfS>2</OneElfS>
+                    <Strict>2</Strict>
+                    <EnumInt>2</EnumInt>
+                    <PlainCh>2</PlainCh>
+                    <Ropi>2</Ropi>
+                    <Rwpi>2</Rwpi>
+                    <wLevel>0</wLevel>
+                    <uThumb>2</uThumb>
+                    <uSurpInc>2</uSurpInc>
+                    <uC99>2</uC99>
+                    <uGnu>2</uGnu>
+                    <useXO>2</useXO>
+                    <v6Lang>0</v6Lang>
+                    <v6LangP>0</v6LangP>
+                    <vShortEn>2</vShortEn>
+                    <vShortWch>2</vShortWch>
+                    <v6Lto>2</v6Lto>
+                    <v6WtE>2</v6WtE>
+                    <v6Rtti>2</v6Rtti>
+                    <VariousControls>
+                      <MiscControls></MiscControls>
+                      <Define></Define>
+                      <Undefine></Undefine>
+                      <IncludePath></IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
             </File>
             <File>
               <FileName>i2c.c</FileName>

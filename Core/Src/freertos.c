@@ -25,7 +25,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "user_periph_setup.h"
 
+#include "bsp_wrapper_imu.h"
+#include "myprintf.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -115,9 +118,15 @@ void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
   /* Infinite loop */
+  /* 组合根：内核启动前注册全部BSP Adapter */
+  if (PLATFORM_IS_ERR(app_periph_init()))
+  {
+    Error_Handler();
+  }
+
   for(;;)
   {
-    osDelay(1);
+    osDelay(1000);
   }
   /* USER CODE END StartDefaultTask */
 }

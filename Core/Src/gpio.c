@@ -53,9 +53,9 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOB, PB12_AIN1_Pin|PB13_AIN2_Pin|PB14_BIN1_Pin|PB15_BIN2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : PA0_LSENSOR_0_Pin PA1_LSENSOR_1_Pin PA2_LSENSOR_2_Pin PA3_LSENSOR_3_Pin
-                           PA4_LSENSOR_4_Pin PA5_LSENSOR_5_Pin PA6_LSENSOR_6_Pin */
+                           PA4_LSENSOR_4_Pin PA5_LSENSOR_5_Pin PA6_LSENSOR_6_Pin PA7_LSENSOR_7_Pin */
   GPIO_InitStruct.Pin = PA0_LSENSOR_0_Pin|PA1_LSENSOR_1_Pin|PA2_LSENSOR_2_Pin|PA3_LSENSOR_3_Pin
-                          |PA4_LSENSOR_4_Pin|PA5_LSENSOR_5_Pin|PA6_LSENSOR_6_Pin;
+                          |PA4_LSENSOR_4_Pin|PA5_LSENSOR_5_Pin|PA6_LSENSOR_6_Pin|PA7_LSENSOR_7_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);

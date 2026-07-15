@@ -71,6 +71,8 @@ void Error_Handler(void);
 #define PA5_LSENSOR_5_GPIO_Port GPIOA
 #define PA6_LSENSOR_6_Pin GPIO_PIN_6
 #define PA6_LSENSOR_6_GPIO_Port GPIOA
+#define PA7_LSENSOR_7_Pin GPIO_PIN_7
+#define PA7_LSENSOR_7_GPIO_Port GPIOA
 #define PB0_ADC1_IN8_Pin GPIO_PIN_0
 #define PB0_ADC1_IN8_GPIO_Port GPIOB
 #define PB12_AIN1_Pin GPIO_PIN_12
