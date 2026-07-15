@@ -3,8 +3,11 @@
  * @brief   MCU逻辑周期定时器统一Port接口（控制节拍）
  * @note    - 逻辑定时器到物理TIM的映射只存在于同层timer_port.c
  *          - 周期回调在定时器更新中断内直跑，必须短小且不阻塞
- *          - HAL_TIM_PeriodElapsedCallback由CubeMX main.c持有，
- *            main.c的USER CODE内按实例路由到core_timer_isr_entry
+ *          - HAL_TIM_PeriodElapsedCallback由timer_port.c唯一持有并
+ *            统一分发（含TIM11 HAL时基喂tick）；CubeMX重新生成
+ *            main.c会再生成同名函数造成重复定义，必须删除main.c那份
+ *          - start以自有标志保证幂等：本仓库HAL对重复Start返回
+ *            HAL_ERROR（状态机BUSY），不能依赖HAL自身容错
  */
 
 #ifndef TIMER_PORT_H
@@ -37,7 +40,7 @@ platform_err_t core_timer_reg_isr(en_core_timer_t id,
  * @brief  启动逻辑定时器周期中断
  * @param  id 逻辑定时器实例
  * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM / PLATFORM_ERR_FAIL
- * @note   已在运行时视为成功，幂等
+ * @note   已启动直接返回OK（自有标志兜底幂等，不经HAL）
  */
 platform_err_t core_timer_start(en_core_timer_t id);
 
@@ -63,12 +66,5 @@ platform_err_t core_timer_isr_mask(en_core_timer_t id);
  * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM
  */
 platform_err_t core_timer_isr_unmask(en_core_timer_t id);
-
-/**
- * @brief  周期到点分发入口，仅由main.c的HAL回调路由调用
- * @param  id 触发的逻辑定时器实例
- * @note   ISR上下文
- */
-void core_timer_isr_entry(en_core_timer_t id);
 
 #endif /* TIMER_PORT_H */

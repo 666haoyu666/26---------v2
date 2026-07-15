@@ -3,6 +3,12 @@
  * @brief   MCU逻辑周期定时器Port实现（STM32F411 HAL）
  * @note    - 逻辑ID=映射表下标，映射唯一依据《核心引脚分配表》
  *          - TIM9基参数(10ms)由MX_TIM9_Init配置，本层不重复初始化
+ *          - HAL_TIM_PeriodElapsedCallback弱符号唯一实现在本层：
+ *            TIM11喂HAL时基（原CubeMX main.c逻辑，已删除main.c副本，
+ *            CubeMX重新生成后需再删），其余实例按映射表分发
+ *          - 本仓库HAL的Base_Start_IT在状态非READY时返回HAL_ERROR
+ *            且运行期状态恒为BUSY，重复启动必报错，故以s_started
+ *            标志保证幂等（两电机共用一个节拍即两次start）
  *          - mask/unmask走NVIC：TIM1_BRK与TIM9共线，屏蔽期间
  *            TIM1刹车中断同样被延迟（本工程未用TIM1刹车）
  */
@@ -26,6 +32,9 @@ static const timer_map_t s_timer_map[EN_CORE_TIMER_NUM] = {
 /** 各逻辑定时器注册的周期回调（Adapter ISR入口）。 */
 static core_timer_cb_t s_cb[EN_CORE_TIMER_NUM];
 
+/** 1=该定时器已启动；保证重复start幂等，不依赖HAL状态机。 */
+static uint8_t s_started[EN_CORE_TIMER_NUM];
+
 platform_err_t core_timer_reg_isr(en_core_timer_t id,
                                   core_timer_cb_t cb)
 {
@@ -43,17 +52,17 @@ platform_err_t core_timer_reg_isr(en_core_timer_t id,
 
 platform_err_t core_timer_start(en_core_timer_t id)
 {
-    HAL_StatusTypeDef hal; /* HAL调用结果 */
-
     if (id >= EN_CORE_TIMER_NUM) {
         return PLATFORM_ERR_PARAM;
     }
-
-    hal = HAL_TIM_Base_Start_IT(s_timer_map[id].htim);
-    /* 已在运行返回BUSY，视为成功保证幂等 */
-    if ((hal != HAL_OK) && (hal != HAL_BUSY)) {
+    if (s_started[id] != 0U) {
+        return PLATFORM_ERR_OK; /* 已启动，幂等 */
+    }
+    if (HAL_TIM_Base_Start_IT(s_timer_map[id].htim) != HAL_OK) {
         return PLATFORM_ERR_FAIL;
     }
+
+    s_started[id] = 1U;
     return PLATFORM_ERR_OK;
 }
 
@@ -65,6 +74,8 @@ platform_err_t core_timer_stop(en_core_timer_t id)
     if (HAL_TIM_Base_Stop_IT(s_timer_map[id].htim) != HAL_OK) {
         return PLATFORM_ERR_FAIL;
     }
+
+    s_started[id] = 0U;
     return PLATFORM_ERR_OK;
 }
 
@@ -91,12 +102,28 @@ platform_err_t core_timer_isr_unmask(en_core_timer_t id)
     return PLATFORM_ERR_OK;
 }
 
-void core_timer_isr_entry(en_core_timer_t id)
+/**
+ * @brief  TIM周期到点回调（HAL弱符号唯一实现）
+ * @param  htim 触发的TIM句柄
+ * @note   ISR上下文：TIM11喂HAL时基，其余按映射表分发到
+ *         各能力Adapter注册的节拍回调；仅路由，不阻塞
+ */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    if (id >= EN_CORE_TIMER_NUM) {
+    uint32_t i; /* 映射表游标 */
+
+    /* HAL时基：TIM11每1ms递增uwTick（原CubeMX main.c逻辑） */
+    if (htim->Instance == TIM11) {
+        HAL_IncTick();
         return;
     }
-    if (s_cb[id] != NULL) {
-        s_cb[id](); /* ISR内不处理回调返回值 */
+
+    for (i = 0U; i < (uint32_t)EN_CORE_TIMER_NUM; i++) {
+        if (htim == s_timer_map[i].htim) {
+            if (s_cb[i] != NULL) {
+                s_cb[i](); /* ISR内不处理回调返回值 */
+            }
+            return;
+        }
     }
 }

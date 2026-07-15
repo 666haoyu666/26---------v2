@@ -2,6 +2,10 @@
  * @file    bsp_adapter_port_motor.c
  * @brief   电机Adapter：绑定bsp_motor驱动、板级映射与PWM/IO/编码器/节拍
  * @note    - 唯一知道电机接线、编码器映射、CPR与PID参数的位置
+ *          - 状态码统一platform_err_t：Driver状态码在本层完成映射，
+ *            MCU Port错误原样透传
+ *          - PWM满幅运行期取自core_pwm_get_max(=定时器ARR)，
+ *            CubeMX改PWM分辨率无需改本层与配置
  *          - 10ms控制节拍经core_timer在TIM9中断内直跑：
  *            编码器速度更新 -> PID -> 写PWM，OFF态只维持里程
  *          - 编码器步进经core_encoder在EXTI中断内注入驱动计数；
@@ -46,8 +50,7 @@ typedef struct {
 /** 两轮上下文：[0]=A左轮，[1]=B右轮。 */
 static motor_adp_t s_motor[2];
 
-static motor_drv_status_t map_motor_st(motor_status_t st);
-static motor_drv_status_t map_platform_err(platform_err_t err);
+static platform_err_t motor_map_drv_st(motor_status_t st);
 static motor_adp_t *motor_ctx(motor_drv_t *dev);
 static motor_status_t motor_hw_out(motor_adp_t *m,
                                    motor_dir_t dir, uint16_t pwm);
@@ -63,53 +66,30 @@ static void motor_b_enc_step_isr(int8_t step);
 static void motor_snap_write(motor_adp_t *m);
 static void motor_tick_update(motor_adp_t *m);
 static void motor_tick_isr(void);
-static motor_drv_status_t motor_op_init(motor_drv_t *dev);
-static motor_drv_status_t motor_op_deinit(motor_drv_t *dev);
-static motor_drv_status_t motor_op_start(motor_drv_t *dev);
-static motor_drv_status_t motor_op_stop(motor_drv_t *dev);
-static motor_drv_status_t motor_op_set_rps(motor_drv_t *dev,
-                                           float rps);
-static motor_drv_status_t motor_op_get_state(motor_drv_t *dev,
-                                             motor_drv_state_t *state);
+static platform_err_t motor_op_init(motor_drv_t *dev);
+static platform_err_t motor_op_deinit(motor_drv_t *dev);
+static platform_err_t motor_op_start(motor_drv_t *dev);
+static platform_err_t motor_op_stop(motor_drv_t *dev);
+static platform_err_t motor_op_set_rps(motor_drv_t *dev, float rps);
+static platform_err_t motor_op_get_state(motor_drv_t *dev,
+                                         motor_drv_state_t *state);
 
 /**
- * @brief  将驱动状态码映射为wrapper状态码
+ * @brief  将驱动状态码映射为平台错误码
  * @param  st 驱动调用结果
- * @retval 对应motor_drv_status_t，未知状态归入FAIL
+ * @retval 对应platform_err_t，未知状态归入FAIL
  */
-static motor_drv_status_t map_motor_st(motor_status_t st)
+static platform_err_t motor_map_drv_st(motor_status_t st)
 {
     switch (st) {
         case MOTOR_OK:
-            return MOTOR_DRV_OK;
+            return PLATFORM_ERR_OK;
 
         case MOTOR_ERRORPARAMETER:
-            return MOTOR_DRV_ERR_PARAM;
+            return PLATFORM_ERR_PARAM;
 
         default:
-            return MOTOR_DRV_ERR_FAIL;
-    }
-}
-
-/**
- * @brief  将平台错误码映射为wrapper状态码
- * @param  err MCU Port调用结果
- * @retval 对应motor_drv_status_t，未知错误归入FAIL
- */
-static motor_drv_status_t map_platform_err(platform_err_t err)
-{
-    switch (err) {
-        case PLATFORM_ERR_OK:
-            return MOTOR_DRV_OK;
-
-        case PLATFORM_ERR_PARAM:
-            return MOTOR_DRV_ERR_PARAM;
-
-        case PLATFORM_ERR_ALREADY_INIT:
-            return MOTOR_DRV_ERR_STATE;
-
-        default:
-            return MOTOR_DRV_ERR_FAIL;
+            return PLATFORM_ERR_FAIL;
     }
 }
 
@@ -292,17 +272,23 @@ static void motor_tick_isr(void)
 /**
  * @brief  初始化单电机（Wrapper pf_init）
  * @param  dev 设备表
- * @retval MOTOR_DRV_OK / MOTOR_DRV_ERR_PARAM / MOTOR_DRV_ERR_FAIL
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM / PLATFORM_ERR_FAIL
  * @note   完成后硬件静止、OFF态；重复init视为重新装配
  */
-static motor_drv_status_t motor_op_init(motor_drv_t *dev)
+static platform_err_t motor_op_init(motor_drv_t *dev)
 {
-    motor_adp_t       *m = motor_ctx(dev); /* 本电机上下文 */
-    motor_drv_status_t ret;                /* 装配结果 */
-    platform_err_t     err;                /* Port调用结果 */
+    motor_adp_t   *m = motor_ctx(dev); /* 本电机上下文 */
+    platform_err_t err;                /* 装配/Port调用结果 */
+    uint16_t       pwm_max;            /* PWM满幅，运行期取ARR */
 
     if (m == NULL) {
-        return MOTOR_DRV_ERR_PARAM;
+        return PLATFORM_ERR_PARAM;
+    }
+
+    /* PWM满幅跟随定时器实际配置，避免与CubeMX改动脱节 */
+    err = core_pwm_get_max(m->pwm_id, &pwm_max);
+    if (PLATFORM_IS_ERR(err)) {
+        return err;
     }
 
     /* 屏蔽节拍，防止重初始化期间控制环使用半旧对象 */
@@ -311,87 +297,84 @@ static motor_drv_status_t motor_op_init(motor_drv_t *dev)
     m->active = 0U;
     m->fault  = MOTOR_DRV_FLT_NONE;
 
-    ret = map_motor_st(motor_driver_inst(&m->drv, m->pf_en,
-                                         m->pf_out, m->fwd_dir,
-                                         (uint16_t)BOARD_MOTOR_PWM_MAX));
-    if (ret == MOTOR_DRV_OK) {
+    err = motor_map_drv_st(motor_driver_inst(&m->drv, m->pf_en,
+                                             m->pf_out, m->fwd_dir,
+                                             pwm_max));
+    if (PLATFORM_IS_OK(err)) {
         if (encoder_inst(&m->drv.encoder, m->enc_sign,
                          BOARD_MOTOR_CPR,
                          BOARD_MOTOR_TICK_S) != ENCODER_OK) {
-            ret = MOTOR_DRV_ERR_FAIL;
+            err = PLATFORM_ERR_FAIL;
         }
     }
-    if (ret == MOTOR_DRV_OK) {
+    if (PLATFORM_IS_OK(err)) {
         if (motor_pid_inst(&m->drv.pid, BOARD_MOTOR_PID_KP,
                            BOARD_MOTOR_PID_KI, BOARD_MOTOR_PID_KD,
-                           (float)BOARD_MOTOR_PWM_MAX,
-                           -(float)BOARD_MOTOR_PWM_MAX,
+                           (float)pwm_max, -(float)pwm_max,
                            BOARD_MOTOR_PID_ILIMIT) != PID_OK) {
-            ret = MOTOR_DRV_ERR_FAIL;
+            err = PLATFORM_ERR_FAIL;
         }
     }
-    if (ret == MOTOR_DRV_OK) {
+    if (PLATFORM_IS_OK(err)) {
         motor_snap_write(m); /* 初始OFF快照 */
     }
 
     (void)core_timer_isr_unmask(BOARD_MOTOR_TICK_TIMER);
-    if (ret != MOTOR_DRV_OK) {
-        return ret;
+    if (PLATFORM_IS_ERR(err)) {
+        return err;
     }
 
     /* 硬件置于安全静止：断PWM+方向双低，再放行外设 */
     if (motor_hw_out(m, m->fwd_dir, 0U) != MOTOR_OK) {
-        return MOTOR_DRV_ERR_FAIL;
+        return PLATFORM_ERR_FAIL;
     }
     err = core_pwm_start(m->pwm_id);
     if (PLATFORM_IS_ERR(err)) {
-        return map_platform_err(err);
+        return err;
     }
     err = core_encoder_start(m->enc_id);
     if (PLATFORM_IS_ERR(err)) {
-        return map_platform_err(err);
+        return err;
     }
 
-    /* 节拍为两电机共享，重复start幂等 */
-    err = core_timer_start(BOARD_MOTOR_TICK_TIMER);
-    if (PLATFORM_IS_ERR(err)) {
-        return map_platform_err(err);
-    }
-    return MOTOR_DRV_OK;
+    /* 节拍为两电机共享，core_timer_start自带幂等 */
+    return core_timer_start(BOARD_MOTOR_TICK_TIMER);
 }
 
 /**
  * @brief  反初始化单电机（Wrapper pf_deinit）
  * @param  dev 设备表
- * @retval MOTOR_DRV_OK / MOTOR_DRV_ERR_PARAM / MOTOR_DRV_ERR_FAIL
- * @note   停输出、停编码器上报、停PWM通道；
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM / PLATFORM_ERR_FAIL
+ * @note   停输出、停编码器上报、软停PWM；
  *         节拍定时器为共享资源保持运行，控制环按is_inited跳过
  */
-static motor_drv_status_t motor_op_deinit(motor_drv_t *dev)
+static platform_err_t motor_op_deinit(motor_drv_t *dev)
 {
-    motor_adp_t       *m   = motor_ctx(dev);  /* 本电机上下文 */
-    motor_drv_status_t ret = MOTOR_DRV_OK;    /* 首个失败结果 */
+    motor_adp_t   *m   = motor_ctx(dev);  /* 本电机上下文 */
+    platform_err_t ret = PLATFORM_ERR_OK; /* 首个失败结果 */
 
     if (m == NULL) {
-        return MOTOR_DRV_ERR_PARAM;
+        return PLATFORM_ERR_PARAM;
     }
 
     (void)core_timer_isr_mask(BOARD_MOTOR_TICK_TIMER);
     m->active = 0U;
     if (m->drv.is_enabled != 0U) {
         if (motor_driver_stop(&m->drv) != MOTOR_OK) {
-            ret = MOTOR_DRV_ERR_FAIL;
+            ret = PLATFORM_ERR_FAIL;
         }
     }
     m->drv.is_inited = 0U; /* 驱动无deinit接口，显式退出装配态 */
     (void)core_timer_isr_unmask(BOARD_MOTOR_TICK_TIMER);
 
-    if (PLATFORM_IS_ERR(core_encoder_stop(m->enc_id))) {
-        ret = (ret == MOTOR_DRV_OK) ? MOTOR_DRV_ERR_FAIL : ret;
+    if (PLATFORM_IS_ERR(core_encoder_stop(m->enc_id)) &&
+        PLATFORM_IS_OK(ret)) {
+        ret = PLATFORM_ERR_FAIL;
     }
     (void)core_pwm_set_duty(m->pwm_id, 0U);
-    if (PLATFORM_IS_ERR(core_pwm_stop(m->pwm_id))) {
-        ret = (ret == MOTOR_DRV_OK) ? MOTOR_DRV_ERR_FAIL : ret;
+    if (PLATFORM_IS_ERR(core_pwm_stop(m->pwm_id)) &&
+        PLATFORM_IS_OK(ret)) {
+        ret = PLATFORM_ERR_FAIL;
     }
     return ret;
 }
@@ -399,27 +382,27 @@ static motor_drv_status_t motor_op_deinit(motor_drv_t *dev)
 /**
  * @brief  使能单电机进入闭环（Wrapper pf_start）
  * @param  dev 设备表
- * @retval MOTOR_DRV_OK / MOTOR_DRV_ERR_PARAM /
- *         MOTOR_DRV_ERR_STATE(未init) / MOTOR_DRV_ERR_FAIL
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM /
+ *         PLATFORM_ERR_NOT_INITIALIZED(未init) / PLATFORM_ERR_FAIL
  * @note   清除故障锁存并复位PID；目标转速保持上次stop清零后的值
  */
-static motor_drv_status_t motor_op_start(motor_drv_t *dev)
+static platform_err_t motor_op_start(motor_drv_t *dev)
 {
-    motor_adp_t       *m   = motor_ctx(dev); /* 本电机上下文 */
-    motor_drv_status_t ret = MOTOR_DRV_OK;   /* 使能结果 */
+    motor_adp_t   *m   = motor_ctx(dev);  /* 本电机上下文 */
+    platform_err_t ret = PLATFORM_ERR_OK; /* 使能结果 */
 
     if (m == NULL) {
-        return MOTOR_DRV_ERR_PARAM;
+        return PLATFORM_ERR_PARAM;
     }
     if (m->drv.is_inited == 0U) {
-        return MOTOR_DRV_ERR_STATE;
+        return PLATFORM_ERR_NOT_INITIALIZED;
     }
 
     (void)core_timer_isr_mask(BOARD_MOTOR_TICK_TIMER);
     m->fault = MOTOR_DRV_FLT_NONE;
     if (m->active == 0U) {
-        ret = map_motor_st(motor_driver_enable(&m->drv, 1U));
-        if (ret == MOTOR_DRV_OK) {
+        ret = motor_map_drv_st(motor_driver_enable(&m->drv, 1U));
+        if (PLATFORM_IS_OK(ret)) {
             m->active = 1U;
         }
     }
@@ -430,26 +413,26 @@ static motor_drv_status_t motor_op_start(motor_drv_t *dev)
 /**
  * @brief  失能单电机滑行（Wrapper pf_stop）
  * @param  dev 设备表
- * @retval MOTOR_DRV_OK / MOTOR_DRV_ERR_PARAM /
- *         MOTOR_DRV_ERR_STATE(未init) / MOTOR_DRV_ERR_FAIL
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM /
+ *         PLATFORM_ERR_NOT_INITIALIZED(未init) / PLATFORM_ERR_FAIL
  * @note   保留累计位置；目标转速被清零，重启后需重新设置
  */
-static motor_drv_status_t motor_op_stop(motor_drv_t *dev)
+static platform_err_t motor_op_stop(motor_drv_t *dev)
 {
-    motor_adp_t       *m   = motor_ctx(dev); /* 本电机上下文 */
-    motor_drv_status_t ret = MOTOR_DRV_OK;   /* 停止结果 */
+    motor_adp_t   *m   = motor_ctx(dev);  /* 本电机上下文 */
+    platform_err_t ret = PLATFORM_ERR_OK; /* 停止结果 */
 
     if (m == NULL) {
-        return MOTOR_DRV_ERR_PARAM;
+        return PLATFORM_ERR_PARAM;
     }
     if (m->drv.is_inited == 0U) {
-        return MOTOR_DRV_ERR_STATE;
+        return PLATFORM_ERR_NOT_INITIALIZED;
     }
 
     (void)core_timer_isr_mask(BOARD_MOTOR_TICK_TIMER);
     if (m->active != 0U) {
         m->active = 0U;
-        ret = map_motor_st(motor_driver_stop(&m->drv));
+        ret = motor_map_drv_st(motor_driver_stop(&m->drv));
     }
     (void)core_timer_isr_unmask(BOARD_MOTOR_TICK_TIMER);
     return ret;
@@ -459,23 +442,22 @@ static motor_drv_status_t motor_op_stop(motor_drv_t *dev)
  * @brief  设置单电机目标转速（Wrapper pf_set_rps）
  * @param  dev 设备表
  * @param  rps 输出轴目标转速，正=前进方向
- * @retval MOTOR_DRV_OK / MOTOR_DRV_ERR_PARAM /
- *         MOTOR_DRV_ERR_STATE(未init)
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM /
+ *         PLATFORM_ERR_NOT_INITIALIZED(未init)
  * @note   对齐单字浮点存储，相对节拍ISR天然原子，无需屏蔽
  */
-static motor_drv_status_t motor_op_set_rps(motor_drv_t *dev,
-                                           float rps)
+static platform_err_t motor_op_set_rps(motor_drv_t *dev, float rps)
 {
     motor_adp_t *m = motor_ctx(dev); /* 本电机上下文 */
 
     if (m == NULL) {
-        return MOTOR_DRV_ERR_PARAM;
+        return PLATFORM_ERR_PARAM;
     }
     if (m->drv.is_inited == 0U) {
-        return MOTOR_DRV_ERR_STATE;
+        return PLATFORM_ERR_NOT_INITIALIZED;
     }
 
-    return map_motor_st(
+    return motor_map_drv_st(
         motor_driver_set_target_speed(&m->drv, rps));
 }
 
@@ -483,12 +465,12 @@ static motor_drv_status_t motor_op_set_rps(motor_drv_t *dev,
  * @brief  读取单电机同拍状态快照（Wrapper pf_get_state）
  * @param  dev   设备表
  * @param  state 输出快照，失败时不修改
- * @retval MOTOR_DRV_OK / MOTOR_DRV_ERR_PARAM /
- *         MOTOR_DRV_ERR_STATE(未init)
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM /
+ *         PLATFORM_ERR_NOT_INITIALIZED(未init)
  * @note   seq双查：写方为ISR整体先行，读中被打断则seq变化重读
  */
-static motor_drv_status_t motor_op_get_state(motor_drv_t *dev,
-                                             motor_drv_state_t *state)
+static platform_err_t motor_op_get_state(motor_drv_t *dev,
+                                         motor_drv_state_t *state)
 {
     motor_adp_t      *m = motor_ctx(dev); /* 本电机上下文 */
     motor_drv_state_t copy;               /* 本地一致副本 */
@@ -496,10 +478,10 @@ static motor_drv_status_t motor_op_get_state(motor_drv_t *dev,
     uint32_t          seq_after;          /* 读后序号 */
 
     if ((m == NULL) || (state == NULL)) {
-        return MOTOR_DRV_ERR_PARAM;
+        return PLATFORM_ERR_PARAM;
     }
     if (m->drv.is_inited == 0U) {
-        return MOTOR_DRV_ERR_STATE;
+        return PLATFORM_ERR_NOT_INITIALIZED;
     }
 
     do {
@@ -517,14 +499,13 @@ static motor_drv_status_t motor_op_get_state(motor_drv_t *dev,
     } while (seq_before != seq_after);
 
     *state = copy;
-    return MOTOR_DRV_OK;
+    return PLATFORM_ERR_OK;
 }
 
-motor_drv_status_t drv_adapter_motor_register(void)
+platform_err_t drv_adapter_motor_register(void)
 {
-    motor_drv_t        dev; /* 待注册的设备表 */
-    platform_err_t     err; /* ISR注册结果 */
-    motor_drv_status_t ret; /* 槽位注册结果 */
+    motor_drv_t    dev; /* 待注册的设备表 */
+    platform_err_t err; /* 注册结果 */
 
     /* A电机（左轮）板级绑定 */
     s_motor[0].pwm_id   = BOARD_MOTOR_A_PWM;
@@ -555,17 +536,17 @@ motor_drv_status_t drv_adapter_motor_register(void)
     /* 挂ISR分发（此时节拍未启动、EXTI未放行，回调不会触发） */
     err = core_timer_reg_isr(BOARD_MOTOR_TICK_TIMER, motor_tick_isr);
     if (PLATFORM_IS_ERR(err)) {
-        return map_platform_err(err);
+        return err;
     }
     err = core_encoder_reg_isr(BOARD_MOTOR_A_ENCODER,
                                motor_a_enc_step_isr);
     if (PLATFORM_IS_ERR(err)) {
-        return map_platform_err(err);
+        return err;
     }
     err = core_encoder_reg_isr(BOARD_MOTOR_B_ENCODER,
                                motor_b_enc_step_isr);
     if (PLATFORM_IS_ERR(err)) {
-        return map_platform_err(err);
+        return err;
     }
 
     /* 装配设备表并逐槽位注册，op全部必填 */
@@ -579,9 +560,9 @@ motor_drv_status_t drv_adapter_motor_register(void)
 
     dev.dev_id    = 0U; /* A电机 */
     dev.user_data = &s_motor[0];
-    ret = drv_adapter_motor_reg(BOARD_MOTOR_A_SLOT, &dev);
-    if (ret != MOTOR_DRV_OK) {
-        return ret;
+    err = drv_adapter_motor_reg(BOARD_MOTOR_A_SLOT, &dev);
+    if (PLATFORM_IS_ERR(err)) {
+        return err;
     }
 
     dev.dev_id    = 1U; /* B电机 */

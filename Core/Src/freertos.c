@@ -27,7 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include "user_periph_setup.h"
 
-#include "bsp_wrapper_imu.h"
+#include "bsp_wrapper_motor.h"
 #include "myprintf.h"
 /* USER CODE END Includes */
 
@@ -123,9 +123,19 @@ void StartDefaultTask(void *argument)
   {
     Error_Handler();
   }
-
+  drv_adapter_motor_start();
+  drv_adapter_motor_set_rps(0 ,5.0f);
+  drv_adapter_motor_set_rps(1 ,5.0f);
+  
+  char buf[128];
   for(;;)
   {
+    motor_drv_state_t state_a;
+    motor_drv_state_t state_b;
+    drv_adapter_motor_get_state(0 ,&state_a);
+    drv_adapter_motor_get_state(1 ,&state_b);
+
+    myprintf(buf, sizeof(buf), "A: %f, B: %f\r\n", state_a.rps, state_b.rps);
     osDelay(1000);
   }
   /* USER CODE END StartDefaultTask */

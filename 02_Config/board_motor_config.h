@@ -16,8 +16,10 @@
 
 #define BOARD_MOTOR_TICK_TIMER (EN_CORE_TIMER_CTRL_10MS) /* 控制节拍 */
 #define BOARD_MOTOR_TICK_S     (0.010f)  /* 节拍周期s，与TIM9一致 */
-#define BOARD_MOTOR_PWM_MAX    (10000U)  /* PWM满幅，=TIM1 ARR */
 #define BOARD_MOTOR_CPR        (1061U)   /* 输出轴每圈计数(4倍频) */
+
+/* PWM满幅不在此配置：Adapter初始化时经core_pwm_get_max() */
+/* 运行期读取定时器ARR，跟随CubeMX配置自动适应 */
 
 #define BOARD_MOTOR_PID_KP     (300.0f)  /* 速度环比例，待实测回填 */
 #define BOARD_MOTOR_PID_KI     (50.0f)   /* 速度环积分，待实测回填 */
@@ -31,8 +33,8 @@
 #define BOARD_MOTOR_A_IO_IN1       (0U) /* io_port下标: PB12 AIN1 */
 #define BOARD_MOTOR_A_IO_IN2       (1U) /* io_port下标: PB13 AIN2 */
 #define BOARD_MOTOR_A_ENCODER      (EN_CORE_ENCODER_1) /* PB7/PB6 */
-#define BOARD_MOTOR_A_FWD_CW       (1U) /* 1=正输出为顺时针(前进) */
-#define BOARD_MOTOR_A_ENC_REVERSED (0U) /* 1=计数反相，待实测回填 */
+#define BOARD_MOTOR_A_FWD_CW       (0U) /* 1=正输出为顺时针(前进) */
+#define BOARD_MOTOR_A_ENC_REVERSED (1U) /* 1=计数反相，待实测回填 */
 
 /* ---------------- B电机（右轮） ---------------- */
 
@@ -41,7 +43,7 @@
 #define BOARD_MOTOR_B_IO_IN1       (2U) /* io_port下标: PB14 BIN1 */
 #define BOARD_MOTOR_B_IO_IN2       (3U) /* io_port下标: PB15 BIN2 */
 #define BOARD_MOTOR_B_ENCODER      (EN_CORE_ENCODER_2) /* PB5/PB4 */
-#define BOARD_MOTOR_B_FWD_CW       (0U) /* 0=正输出为逆时针(前进) */
+#define BOARD_MOTOR_B_FWD_CW       (1U) /* 1=正输出为顺时针(前进) */
 #define BOARD_MOTOR_B_ENC_REVERSED (0U) /* 1=计数反相，待实测回填 */
 
 #endif /* BOARD_MOTOR_CONFIG_H */

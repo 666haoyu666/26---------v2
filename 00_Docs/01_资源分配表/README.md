@@ -23,7 +23,7 @@
 |---|---|---|---|
 | A 方向 IN1 / IN2 | PB12 / PB13 | `core_io` 0 / 1 | IN1 高 + IN2 低 = 顺时针 |
 | B 方向 IN1 / IN2 | PB14 / PB15 | `core_io` 2 / 3 | 同上 |
-| A PWM | TIM1_CH2 (PA9) | `EN_CORE_PWM_MOTOR_A` | ARR=10000，约 5kHz |
+| A PWM | TIM1_CH2 (PA9) | `EN_CORE_PWM_MOTOR_A` | ARR=9999，约 10kHz |
 | B PWM | TIM1_CH1 (PA8) | `EN_CORE_PWM_MOTOR_B` | 同上 |
 | A 编码器 | E1A=PB7, E1B=PB6 | `EN_CORE_ENCODER_1` | EXTI 双边沿 4 倍频 |
 | B 编码器 | E2A=PB5, E2B=PB4 | `EN_CORE_ENCODER_2` | 同上 |
@@ -38,6 +38,16 @@
 - EXTI4/EXTI9_5 的 IRQHandler 与 `HAL_GPIO_EXTI_Callback` 由
   `encoder_port.c` 持有（.ioc 未勾选 EXTI NVIC）。若在 CubeMX 勾选
   NVIC 重新生成，会产生重复定义，必须删除其中一份。
+- `HAL_TIM_PeriodElapsedCallback` 由 `timer_port.c` 唯一持有并统一
+  分发（含 TIM11 HAL 时基喂 tick）。**CubeMX 重新生成 main.c 会再
+  生成同名函数导致重复定义链接错误，必须删除 main.c 那份。**
+- 本仓库 HAL 的 `HAL_TIM_Base_Start_IT` 在状态非 READY 时返回
+  HAL_ERROR（运行期状态恒为 BUSY），重复启动必报错；MCU Port 层
+  以自有 started 标志保证 start 幂等，禁止依赖 HAL 状态机容错。
+- PWM 满幅由 Adapter 初始化时经 `core_pwm_get_max()` 运行期读取
+  （=定时器 ARR），CubeMX 改 PWM 分辨率无需改配置。
+- 全部 BSP Wrapper 对上错误码统一 `platform_err_t`：槽位/能力未
+  注册报 NOT_INITIALIZED，重复注册报 ALREADY_INIT。
 - 正方向约定（相对车头）：A 顺时针 = 前进，B 逆时针 = 前进。
 - 编码器 A/B 相极性、CPR 与 PID 参数由
   `02_Config/board_motor_config.h` 配置，实测后回填。

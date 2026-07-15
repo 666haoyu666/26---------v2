@@ -37,11 +37,13 @@ platform_err_t app_periph_init(void)
 
     /* 电机（A左/B右两轮）：注册设备表并初始化， */
     /* 初始化后处OFF态不出力，起转由上层start触发 */
-    if (drv_adapter_motor_register() != MOTOR_DRV_OK) {
-        return PLATFORM_ERR_FAIL;
+    err = drv_adapter_motor_register();
+    if (PLATFORM_IS_ERR(err)) {
+        return err;
     }
-    if (drv_adapter_motor_init() != MOTOR_DRV_OK) {
-        return PLATFORM_ERR_FAIL;
+    err = drv_adapter_motor_init();
+    if (PLATFORM_IS_ERR(err)) {
+        return err;
     }
 
     return PLATFORM_ERR_OK;
