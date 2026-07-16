@@ -17,16 +17,36 @@
 #include "osal_mutex.h"
 #include "osal_task.h"
 
-#define TRACK_ERR_LPF_ALPHA      0.2f   /* 循迹模块低通滤波系数 */
-#define TRACK_ERR_SOS_MM         10.0f  /* 循迹危险阈值 */
-#define TRACK_YAW_PERIOD_DEG     360.0f /* 航向角周期，deg */
-#define TRACK_YAW_HALF_DEG       180.0f /* 航向角半周期，deg */
-#define TRACK_PI_RAD             3.14159265358979323846f /* 圆周率 */
-#define TRACK_RAD_PER_DEG        (TRACK_PI_RAD / 180.0f) /* deg转rad */
-#define TRACK_K1_ERR             0.2f   /* 回线增益(deg/s)/mm，待整定 */
-#define TRACK_K2_YAW             1.8f   /* 锁向增益(deg/s)/deg，待整定 */
-#define TRACK_WHEEL_DIST_MM      135.0f /* 左右轮距mm，待实车标定 */
-#define TRACK_SENSOR_TO_WHEEL_MM 160.0f /* 前传感器到后轮轴距离 */
+#define TRACK_ERR_LPF_ALPHA        0.2f   /* 循迹模块低通滤波系数 */
+#define TRACK_ERR_SOS_MM           10.0f  /* 循迹危险阈值 */
+#define TRACK_YAW_PERIOD_DEG       360.0f /* 航向角周期，deg */
+#define TRACK_YAW_HALF_DEG         180.0f /* 航向角半周期，deg */
+#define TRACK_PI_RAD               3.14159265358979323846f /* 圆周率 */
+#define TRACK_RAD_PER_DEG          (TRACK_PI_RAD / 180.0f) /* deg转rad */
+#define TRACK_K1_ERR               0.2f   /* 回线增益(deg/s)/mm，待整定 */
+#define TRACK_K2_YAW               1.8f   /* 锁向增益(deg/s)/deg，待整定 */
+#define TRACK_WHEEL_DIST_MM        135.0f /* 左右轮距mm，待实车标定 */
+#define TRACK_SENSOR_TO_WHEEL_MM   160.0f /* 前传感器到后轮轴距离 */
+
+#define TRACK_TURN_LINEAR_VEL_COMP 0.0f   /* 原地转弯时的补偿量 */
+
+#define TRACK_TURN_KP              10.0f   /* 转向比例(deg/s)/deg，待整定 */
+#define TRACK_TURN_KI              0.0f   /* 转向积分，0即纯PD，待整定 */
+#define TRACK_TURN_KD              3.5f   /* 转向微分增益，待整定 */
+#define TRACK_TURN_W_MAX_DEG_S     360.0f /* 转向角速度限幅，待整定 */
+#define TRACK_TURN_I_MAX_DEG_S     90.0f  /* 转向积分项限幅，待整定 */
+#define TRACK_PID_DT_S (SERVER_CTRL_PERIOD_MS / 1000.0f) /* 控制周期，s */
+
+/** 位置式PID参数与运行状态。 */
+typedef struct {
+    float kp;        /* 比例增益 */
+    float ki;        /* 积分增益 */
+    float kd;        /* 微分增益 */
+    float out_max;   /* 输出限幅，绝对值 */
+    float integ_max; /* 积分项限幅，绝对值 */
+    float integ;     /* 积分项累加值 */
+    float prev_err;  /* 上周期误差 */
+} track_pid_t;
 
 static uint8_t g_track_ctrl_inited = 0U; /* 服务初始化标志 */
 static uint8_t g_track_state = 0U;       /* 当前循迹控制状态 */
@@ -76,6 +96,50 @@ static float track_norm_yaw(float yaw_deg)
     }
 
     return norm_deg - TRACK_YAW_HALF_DEG;
+}
+
+/**
+ * @brief  复位PID积分并对齐微分基准
+ * @param  pid PID实例
+ * @param  err 当前误差，作为下周期微分基准
+ */
+static void track_pid_reset(track_pid_t *pid, float err)
+{
+    pid->integ = 0.0f;
+    pid->prev_err = err;
+}
+
+/**
+ * @brief  位置式PID单步解算
+ * @param  pid PID实例，积分与误差状态随调用推进
+ * @param  err 当前误差
+ * @retval 限幅后的控制输出
+ * @note   周期固定为TRACK_PID_DT_S，Ki为0时退化为PD
+ */
+static float track_pid_calc(track_pid_t *pid, float err)
+{
+    float out; /* 未限幅的PID输出 */
+
+    /* 积分先累加后钳位，长时间大误差不致饱和 */
+    pid->integ += pid->ki * err * TRACK_PID_DT_S;
+    if (pid->integ > pid->integ_max) {
+        pid->integ = pid->integ_max;
+    } else if (pid->integ < -pid->integ_max) {
+        pid->integ = -pid->integ_max;
+    }
+
+    out = pid->kp * err + pid->integ +
+          pid->kd * (err - pid->prev_err) / TRACK_PID_DT_S;
+    pid->prev_err = err;
+
+    /* 输出限幅，保护下游差速解算 */
+    if (out > pid->out_max) {
+        out = pid->out_max;
+    } else if (out < -pid->out_max) {
+        out = -pid->out_max;
+    }
+
+    return out;
 }
 
 /**
@@ -154,13 +218,23 @@ static void server_track_ctrl_task(void *argument)
     float target_w;             /* 目标顺时针角速度，deg/s */
     float yaw_tgt_deg;          /* 快照的目标航向，deg */
     float v_tgt_mm_s;           /* 快照的目标速度，mm/s */
+    float yaw_tgt_prev;         /* 上周期目标航向，deg */
     uint8_t mode_now;           /* 快照的控制模式 */
     uint8_t mode_prev;          /* 上周期控制模式 */
+    track_pid_t turn_pid;       /* TURN航向PID实例 */
     osal_tick_type_t last_wake; /* 上次周期唤醒tick */
     platform_err_t err;         /* 平台接口返回状态 */
 
     (void)argument;
     mode_prev = (uint8_t)TRACK_CTRL_MODE_STOP;
+    yaw_tgt_prev = 0.0f;
+    /* TURN转向PID装配：Ki=0纯PD起步，增益待实车整定 */
+    turn_pid.kp = TRACK_TURN_KP;
+    turn_pid.ki = TRACK_TURN_KI;
+    turn_pid.kd = TRACK_TURN_KD;
+    turn_pid.out_max = TRACK_TURN_W_MAX_DEG_S;
+    turn_pid.integ_max = TRACK_TURN_I_MAX_DEG_S;
+    track_pid_reset(&turn_pid, 0.0f);
     last_wake = osal_task_get_tick_count();
 
     while (1) {
@@ -189,7 +263,6 @@ static void server_track_ctrl_task(void *argument)
                 continue;
             }
         }
-        mode_prev = mode_now;
 
         track_err_now = track_err_get();
         yaw_now_deg = imu_ctrl_get();
@@ -214,12 +287,25 @@ static void server_track_ctrl_task(void *argument)
 
                 break;
             case TRACK_CTRL_MODE_TURN:
-                /* 转向模式：仅根据陀螺仪进行PID中PD辅助转向 */
+                /* 转向模式：航向误差位置式PID解算转向角速度 */
+                yaw_err_deg = track_norm_yaw(yaw_tgt_deg -
+                                             yaw_now_deg);
+                if (mode_prev != (uint8_t)TRACK_CTRL_MODE_TURN ||
+                    yaw_tgt_deg != yaw_tgt_prev) {
+                    /* 新进模式或目标更新：复位防积分残留与微分踢 */
+                    track_pid_reset(&turn_pid, yaw_err_deg);
+                }
+                target_w = track_pid_calc(&turn_pid, yaw_err_deg);
+                track_apply_motion(TRACK_TURN_LINEAR_VEL_COMP,
+                                   target_w);
                 break;
             default:
                 break;
         }
 
+        /* 历史状态延至此更新，供TURN分支识别新命令做复位 */
+        mode_prev = mode_now;
+        yaw_tgt_prev = yaw_tgt_deg;
         track_wait_period(&last_wake);
     }
 }

@@ -336,42 +336,42 @@ motor_status_t motor_driver_pid_update(
         return MOTOR_ERROR;
     }
 
-    /*
-     * 目标速度为0：
-     * 停止电机并清除PID状态。
-     */
-    if ((motor->target_speed_rps < target_zero_epsilon) &&
-        (motor->target_speed_rps > -target_zero_epsilon))
-    {
-        (void)motor_pid_reset(&motor->pid);
+    // /*
+    //  * 目标速度为0：
+    //  * 停止电机并清除PID状态。
+    //  */
+    // if ((motor->target_speed_rps < target_zero_epsilon) &&
+    //     (motor->target_speed_rps > -target_zero_epsilon))
+    // {
+    //     (void)motor_pid_reset(&motor->pid);
 
-        return motor_driver_set_output(
-            motor,
-            0);
-    }
+    //     return motor_driver_set_output(
+    //         motor,
+    //         0);
+    // }
 
-    /*
-     * 安全换向：
-     *
-     * 目标要求反转，但电机仍明显正转；
-     * 或目标要求正转，但电机仍明显反转。
-     *
-     * 此时先断开PWM，让电机减速到接近0。
-     */
-    if (((motor->target_speed_rps < 0.0f) &&
-         (motor->encoder.speed_rps >
-          reverse_speed_threshold)) ||
+    // /*
+    //  * 安全换向：
+    //  *
+    //  * 目标要求反转，但电机仍明显正转；
+    //  * 或目标要求正转，但电机仍明显反转。
+    //  *
+    //  * 此时先断开PWM，让电机减速到接近0。
+    //  */
+    // if (((motor->target_speed_rps < 0.0f) &&
+    //      (motor->encoder.speed_rps >
+    //       reverse_speed_threshold)) ||
 
-        ((motor->target_speed_rps > 0.0f) &&
-         (motor->encoder.speed_rps <
-          -reverse_speed_threshold)))
-    {
-        (void)motor_pid_reset(&motor->pid);
+    //     ((motor->target_speed_rps > 0.0f) &&
+    //      (motor->encoder.speed_rps <
+    //       -reverse_speed_threshold)))
+    // {
+    //     (void)motor_pid_reset(&motor->pid);
 
-        return motor_driver_set_output(
-            motor,
-            0);
-    }
+    //     return motor_driver_set_output(
+    //         motor,
+    //         0);
+    // }
 
     /* 计算PID */
     pid_output = motor_pid_calculate(

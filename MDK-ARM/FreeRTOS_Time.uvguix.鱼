@@ -3606,9 +3606,9 @@
       <ActiveTab>0</ActiveTab>
       <Doc>
         <Name>../Core/Src/freertos.c</Name>
-        <ColumnNumber>25</ColumnNumber>
-        <TopLine>160</TopLine>
-        <CurrentLine>177</CurrentLine>
+        <ColumnNumber>16</ColumnNumber>
+        <TopLine>148</TopLine>
+        <CurrentLine>174</CurrentLine>
         <Folding>1</Folding>
         <ContractedFolders></ContractedFolders>
         <PaneID>0</PaneID>

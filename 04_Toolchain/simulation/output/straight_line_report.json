@@ -1,0 +1,325 @@
+{
+  "firmware_parameters": {
+    "ctrl_period_s": 0.01,
+    "motor_period_s": 0.01,
+    "speed_mm_s": 200.0,
+    "wheel_track_mm": 135.0,
+    "sensor_to_axle_mm": 160.0,
+    "sensor_pos_mm": [
+      -39.7,
+      -25.2,
+      -10.7,
+      0.0,
+      10.7,
+      25.2,
+      39.7
+    ],
+    "lpf_alpha": 0.2,
+    "lost_hold_mm": 10.0,
+    "k_err": 0.2,
+    "k_yaw": 1.8
+  },
+  "assumptions": {
+    "line_width_mm": 20.0,
+    "contract_port_sign": -1.0,
+    "as_coded_port_sign": 1.0,
+    "nominal_motor": {
+      "tau_s": 0.06,
+      "delay_s": 0.01,
+      "left_gain": 1.0,
+      "right_gain": 1.0,
+      "max_speed_mm_s": 500.0
+    },
+    "degraded_motor": {
+      "tau_s": 0.18,
+      "delay_s": 0.04,
+      "left_gain": 0.92,
+      "right_gain": 1.0,
+      "max_speed_mm_s": 350.0
+    }
+  },
+  "cases": {
+    "contract_ideal_offset": {
+      "setup": {
+        "name": "contract_ideal_offset",
+        "init_y_mm": 30.0,
+        "init_yaw_deg": 0.0,
+        "sensor_centered": false,
+        "port_sign": -1.0,
+        "motor": {
+          "tau_s": 0.0,
+          "delay_s": 0.0,
+          "left_gain": 1.0,
+          "right_gain": 1.0,
+          "max_speed_mm_s": null
+        },
+        "duration_s": 12.0,
+        "line_width_mm": 20.0
+      },
+      "metrics": {
+        "settling_time_s": 4.52,
+        "settling_distance_mm": 903.6,
+        "final_rear_error_mm": 0.566,
+        "tail_rms_error_mm": 0.568,
+        "max_abs_rear_error_mm": 30.0,
+        "overshoot_mm": 0.0,
+        "max_abs_yaw_deg": 2.613,
+        "max_abs_w_cmd_deg_s": 4.418,
+        "max_abs_wheel_cmd_mm_s": 205.205,
+        "wheel_tracking_rms_mm_s": 5.772,
+        "sensor_invalid_percent": 0.0,
+        "motor_saturation_percent": 0.0
+      }
+    },
+    "contract_nominal_offset": {
+      "setup": {
+        "name": "contract_nominal_offset",
+        "init_y_mm": 30.0,
+        "init_yaw_deg": 0.0,
+        "sensor_centered": false,
+        "port_sign": -1.0,
+        "motor": {
+          "tau_s": 0.06,
+          "delay_s": 0.01,
+          "left_gain": 1.0,
+          "right_gain": 1.0,
+          "max_speed_mm_s": 500.0
+        },
+        "duration_s": 12.0,
+        "line_width_mm": 20.0
+      },
+      "metrics": {
+        "settling_time_s": 4.49,
+        "settling_distance_mm": 883.8,
+        "final_rear_error_mm": 0.577,
+        "tail_rms_error_mm": 0.578,
+        "max_abs_rear_error_mm": 30.0,
+        "overshoot_mm": 0.0,
+        "max_abs_yaw_deg": 2.719,
+        "max_abs_w_cmd_deg_s": 5.511,
+        "max_abs_wheel_cmd_mm_s": 206.492,
+        "wheel_tracking_rms_mm_s": 12.252,
+        "sensor_invalid_percent": 0.0,
+        "motor_saturation_percent": 0.0
+      }
+    },
+    "contract_degraded_offset": {
+      "setup": {
+        "name": "contract_degraded_offset",
+        "init_y_mm": 30.0,
+        "init_yaw_deg": 0.0,
+        "sensor_centered": false,
+        "port_sign": -1.0,
+        "motor": {
+          "tau_s": 0.18,
+          "delay_s": 0.04,
+          "left_gain": 0.92,
+          "right_gain": 1.0,
+          "max_speed_mm_s": 350.0
+        },
+        "duration_s": 12.0,
+        "line_width_mm": 20.0
+      },
+      "metrics": {
+        "settling_time_s": null,
+        "settling_distance_mm": null,
+        "final_rear_error_mm": -35.133,
+        "tail_rms_error_mm": 35.087,
+        "max_abs_rear_error_mm": 35.151,
+        "overshoot_mm": 35.151,
+        "max_abs_yaw_deg": 6.542,
+        "max_abs_w_cmd_deg_s": 10.064,
+        "max_abs_wheel_cmd_mm_s": 211.857,
+        "wheel_tracking_rms_mm_s": 24.755,
+        "sensor_invalid_percent": 0.0,
+        "motor_saturation_percent": 0.0
+      }
+    },
+    "contract_nominal_slanted": {
+      "setup": {
+        "name": "contract_nominal_slanted",
+        "init_y_mm": 0.0,
+        "init_yaw_deg": 10.0,
+        "sensor_centered": true,
+        "port_sign": -1.0,
+        "motor": {
+          "tau_s": 0.06,
+          "delay_s": 0.01,
+          "left_gain": 1.0,
+          "right_gain": 1.0,
+          "max_speed_mm_s": 500.0
+        },
+        "duration_s": 12.0,
+        "line_width_mm": 20.0
+      },
+      "metrics": {
+        "settling_time_s": 1.53,
+        "settling_distance_mm": 291.1,
+        "final_rear_error_mm": -0.695,
+        "tail_rms_error_mm": 0.695,
+        "max_abs_rear_error_mm": 27.784,
+        "overshoot_mm": 0.0,
+        "max_abs_yaw_deg": 10.0,
+        "max_abs_w_cmd_deg_s": 12.443,
+        "max_abs_wheel_cmd_mm_s": 214.659,
+        "wheel_tracking_rms_mm_s": 12.281,
+        "sensor_invalid_percent": 0.0,
+        "motor_saturation_percent": 0.0
+      }
+    },
+    "as_coded_nominal_offset": {
+      "setup": {
+        "name": "as_coded_nominal_offset",
+        "init_y_mm": 30.0,
+        "init_yaw_deg": 0.0,
+        "sensor_centered": false,
+        "port_sign": 1.0,
+        "motor": {
+          "tau_s": 0.06,
+          "delay_s": 0.01,
+          "left_gain": 1.0,
+          "right_gain": 1.0,
+          "max_speed_mm_s": 500.0
+        },
+        "duration_s": 12.0,
+        "line_width_mm": 20.0
+      },
+      "metrics": {
+        "settling_time_s": null,
+        "settling_distance_mm": null,
+        "final_rear_error_mm": 276.863,
+        "tail_rms_error_mm": 254.932,
+        "max_abs_rear_error_mm": 276.863,
+        "overshoot_mm": 0.0,
+        "max_abs_yaw_deg": 6.39,
+        "max_abs_w_cmd_deg_s": 5.871,
+        "max_abs_wheel_cmd_mm_s": 206.916,
+        "wheel_tracking_rms_mm_s": 12.252,
+        "sensor_invalid_percent": 91.507,
+        "motor_saturation_percent": 0.0
+      }
+    }
+  },
+  "gain_candidates": {
+    "K1_0.25_K2_1.80": {
+      "offset_30mm": {
+        "settling_time_s": 3.39,
+        "settling_distance_mm": 663.7,
+        "final_rear_error_mm": 0.038,
+        "tail_rms_error_mm": 0.039,
+        "max_abs_rear_error_mm": 30.0,
+        "overshoot_mm": 0.0,
+        "max_abs_yaw_deg": 3.277,
+        "max_abs_w_cmd_deg_s": 6.666,
+        "max_abs_wheel_cmd_mm_s": 207.853,
+        "wheel_tracking_rms_mm_s": 12.255,
+        "sensor_invalid_percent": 0.0,
+        "motor_saturation_percent": 0.0
+      },
+      "sensor_centered_yaw_10deg": {
+        "settling_time_s": 1.38,
+        "settling_distance_mm": 261.0,
+        "final_rear_error_mm": 0.672,
+        "tail_rms_error_mm": 0.672,
+        "max_abs_rear_error_mm": 27.784,
+        "overshoot_mm": 0.672,
+        "max_abs_yaw_deg": 10.0,
+        "max_abs_w_cmd_deg_s": 11.054,
+        "max_abs_wheel_cmd_mm_s": 213.023,
+        "wheel_tracking_rms_mm_s": 12.273,
+        "sensor_invalid_percent": 0.0,
+        "motor_saturation_percent": 0.0
+      }
+    },
+    "K1_0.30_K2_1.80": {
+      "offset_30mm": {
+        "settling_time_s": 2.72,
+        "settling_distance_mm": 529.5,
+        "final_rear_error_mm": -0.582,
+        "tail_rms_error_mm": 0.582,
+        "max_abs_rear_error_mm": 30.0,
+        "overshoot_mm": 0.582,
+        "max_abs_yaw_deg": 3.769,
+        "max_abs_w_cmd_deg_s": 8.012,
+        "max_abs_wheel_cmd_mm_s": 209.439,
+        "wheel_tracking_rms_mm_s": 12.259,
+        "sensor_invalid_percent": 0.0,
+        "motor_saturation_percent": 0.0
+      },
+      "sensor_centered_yaw_10deg": {
+        "settling_time_s": 1.36,
+        "settling_distance_mm": 257.0,
+        "final_rear_error_mm": 0.697,
+        "tail_rms_error_mm": 0.697,
+        "max_abs_rear_error_mm": 27.784,
+        "overshoot_mm": 0.697,
+        "max_abs_yaw_deg": 10.0,
+        "max_abs_w_cmd_deg_s": 9.665,
+        "max_abs_wheel_cmd_mm_s": 211.386,
+        "wheel_tracking_rms_mm_s": 12.268,
+        "sensor_invalid_percent": 0.0,
+        "motor_saturation_percent": 0.0
+      }
+    },
+    "K1_0.35_K2_1.80": {
+      "offset_30mm": {
+        "settling_time_s": 2.33,
+        "settling_distance_mm": 451.4,
+        "final_rear_error_mm": -0.582,
+        "tail_rms_error_mm": 0.581,
+        "max_abs_rear_error_mm": 30.0,
+        "overshoot_mm": 0.582,
+        "max_abs_yaw_deg": 4.275,
+        "max_abs_w_cmd_deg_s": 8.917,
+        "max_abs_wheel_cmd_mm_s": 210.505,
+        "wheel_tracking_rms_mm_s": 12.264,
+        "sensor_invalid_percent": 0.0,
+        "motor_saturation_percent": 0.0
+      },
+      "sensor_centered_yaw_10deg": {
+        "settling_time_s": 1.31,
+        "settling_distance_mm": 246.9,
+        "final_rear_error_mm": 0.636,
+        "tail_rms_error_mm": 0.636,
+        "max_abs_rear_error_mm": 27.784,
+        "overshoot_mm": 0.636,
+        "max_abs_yaw_deg": 10.0,
+        "max_abs_w_cmd_deg_s": 9.044,
+        "max_abs_wheel_cmd_mm_s": 210.654,
+        "wheel_tracking_rms_mm_s": 12.263,
+        "sensor_invalid_percent": 0.0,
+        "motor_saturation_percent": 0.0
+      }
+    },
+    "K1_0.40_K2_1.80": {
+      "offset_30mm": {
+        "settling_time_s": 2.1,
+        "settling_distance_mm": 405.3,
+        "final_rear_error_mm": -0.694,
+        "tail_rms_error_mm": 0.692,
+        "max_abs_rear_error_mm": 30.0,
+        "overshoot_mm": 0.694,
+        "max_abs_yaw_deg": 4.765,
+        "max_abs_w_cmd_deg_s": 10.202,
+        "max_abs_wheel_cmd_mm_s": 212.019,
+        "wheel_tracking_rms_mm_s": 12.271,
+        "sensor_invalid_percent": 0.0,
+        "motor_saturation_percent": 0.0
+      },
+      "sensor_centered_yaw_10deg": {
+        "settling_time_s": 1.41,
+        "settling_distance_mm": 266.7,
+        "final_rear_error_mm": -0.052,
+        "tail_rms_error_mm": 0.052,
+        "max_abs_rear_error_mm": 27.784,
+        "overshoot_mm": 0.0,
+        "max_abs_yaw_deg": 10.0,
+        "max_abs_w_cmd_deg_s": 8.229,
+        "max_abs_wheel_cmd_mm_s": 209.694,
+        "wheel_tracking_rms_mm_s": 12.258,
+        "sensor_invalid_percent": 0.0,
+        "motor_saturation_percent": 0.0
+      }
+    }
+  }
+}

@@ -171,10 +171,11 @@ void StartDefaultTask(void *argument)
   {
     Error_Handler();
   }
+	osDelay(2000);
 
   char buf[128];
-  track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR,
-                      0,200);
+  track_ctrl_set_mode(TRACK_CTRL_MODE_TURN,
+                      90,200);
   server_odom_state_t odom_state;
   for(;;)
   {
