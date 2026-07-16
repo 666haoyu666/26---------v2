@@ -17,15 +17,16 @@
 #include "osal_mutex.h"
 #include "osal_task.h"
 
-#define TRACK_ERR_LPF_ALPHA  0.2f   /* 循迹模块低通滤波系数 */
-#define TRACK_ERR_SOS_MM     10.0f  /* 循迹危险阈值 */
-#define TRACK_YAW_PERIOD_DEG 360.0f /* 航向角周期，deg */
-#define TRACK_YAW_HALF_DEG   180.0f /* 航向角半周期，deg */
-#define TRACK_PI_RAD         3.14159265358979323846f /* 圆周率 */
-#define TRACK_RAD_PER_DEG    (TRACK_PI_RAD / 180.0f) /* deg转rad */
-#define TRACK_K1_ERR         0.0f   /* 回线增益(deg/s)/mm，待整定 */
-#define TRACK_K2_YAW         0.01f   /* 锁向增益(deg/s)/deg，待整定 */
-#define TRACK_WHEEL_DIST_MM  135.0f /* 左右轮距mm，待实车标定 */
+#define TRACK_ERR_LPF_ALPHA      0.2f   /* 循迹模块低通滤波系数 */
+#define TRACK_ERR_SOS_MM         10.0f  /* 循迹危险阈值 */
+#define TRACK_YAW_PERIOD_DEG     360.0f /* 航向角周期，deg */
+#define TRACK_YAW_HALF_DEG       180.0f /* 航向角半周期，deg */
+#define TRACK_PI_RAD             3.14159265358979323846f /* 圆周率 */
+#define TRACK_RAD_PER_DEG        (TRACK_PI_RAD / 180.0f) /* deg转rad */
+#define TRACK_K1_ERR             0.2f   /* 回线增益(deg/s)/mm，待整定 */
+#define TRACK_K2_YAW             1.8f   /* 锁向增益(deg/s)/deg，待整定 */
+#define TRACK_WHEEL_DIST_MM      135.0f /* 左右轮距mm，待实车标定 */
+#define TRACK_SENSOR_TO_WHEEL_MM 160.0f /* 前传感器到后轮轴距离 */
 
 static uint8_t g_track_ctrl_inited = 0U; /* 服务初始化标志 */
 static uint8_t g_track_state = 0U;       /* 当前循迹控制状态 */
@@ -204,7 +205,8 @@ static void server_track_ctrl_task(void *argument)
                                              yaw_now_deg);
                 /* err右偏取负逆时针回线，yaw_err>0取正顺时针追向 */
                 target_w = TRACK_K2_YAW * yaw_err_deg -
-                           TRACK_K1_ERR * track_err_now;
+                           TRACK_K1_ERR * (track_err_now + 
+                           TRACK_SENSOR_TO_WHEEL_MM * sinf(yaw_err_deg * TRACK_RAD_PER_DEG));
                 track_apply_motion(v_tgt_mm_s, target_w);
                 break;
             case TRACK_CTRL_MODE_TRACK:

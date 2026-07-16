@@ -174,7 +174,7 @@ void StartDefaultTask(void *argument)
 
   char buf[128];
   track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR,
-                      0,100);
+                      0,200);
   server_odom_state_t odom_state;
   for(;;)
   {
