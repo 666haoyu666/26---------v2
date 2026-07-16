@@ -11,7 +11,7 @@
 #include "platform_error.h"
 
 #define SERVER_ODOM_STACK_SIZE  2048U  /* 里程计任务栈大小，字节 */
-#define SERVER_ODOM_TASK_PRIO   24U    /* 里程计任务优先级 */
+#define SERVER_ODOM_TASK_PRIO   25U    /* 里程计任务优先级 */
 #define SERVER_ODOM_PERIOD_MS   10U    /* 里程计解算周期，ms */
 
 /** 里程计运行状态。 */

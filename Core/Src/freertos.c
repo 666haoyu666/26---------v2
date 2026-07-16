@@ -32,6 +32,10 @@
 #include "myprintf.h"
 #include "service_diff_odom.h"
 #include "bsp_wrapper_imu.h"
+#include "service_track_ctrl.h"
+#include "motor_ctrl_port.h"
+#include "imu_ctrl_port.h"
+#include "track_port.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,6 +49,8 @@
 #define ODOM_DEMO_WHEEL_DIA_MM (65.0f)
 #define ODOM_DEMO_MM_TICK      (ODOM_DEMO_WHEEL_DIA_MM * 3.1415927f / \
                                 (float)BOARD_MOTOR_CPR)
+/* 循迹控制装配：每转行程随轮径实测同步更新 */
+#define CTRL_DEMO_MM_REV       (ODOM_DEMO_WHEEL_DIA_MM * 3.1415927f)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -130,10 +136,6 @@ void StartDefaultTask(void *argument)
     Error_Handler();
   }
 
-  drv_adapter_motor_start();
-  drv_adapter_motor_set_rps(0 ,5.0f);
-  drv_adapter_motor_set_rps(1 ,5.0f);
-
   /* 里程计装配：槽位对齐board_motor_config，标定值待实测回填 */
   server_odom_cfg_t odom_cfg;
   odom_cfg.left_id = BOARD_MOTOR_A_SLOT;
@@ -147,15 +149,35 @@ void StartDefaultTask(void *argument)
     Error_Handler();
   }
 
-  
-  
-  char buf[128];
+  /* 循迹控制装配：Port先行、服务最后；左右槽位与odom一致 */
+  motor_ctrl_cfg_t ctrl_cfg;
+  ctrl_cfg.left_id = BOARD_MOTOR_A_SLOT;
+  ctrl_cfg.right_id = BOARD_MOTOR_B_SLOT;
+  ctrl_cfg.left_mm_rev = CTRL_DEMO_MM_REV;
+  ctrl_cfg.right_mm_rev = CTRL_DEMO_MM_REV;
+  if (PLATFORM_IS_ERR(motor_ctrl_init(&ctrl_cfg)))
+  {
+    Error_Handler();
+  }
+  if (PLATFORM_IS_ERR(imu_ctrl_init()))
+  {
+    Error_Handler();
+  }
+  if (PLATFORM_IS_ERR(track_port_init()))
+  {
+    Error_Handler();
+  }
+  if (PLATFORM_IS_ERR(track_ctrl_init()))
+  {
+    Error_Handler();
+  }
 
+  char buf[128];
+  track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR,
+                      0,100);
   server_odom_state_t odom_state;
   for(;;)
   {
-    float yaw_deg;
-    bsp_imu_data_t imu_data;
     server_odom_get(&odom_state);
     myprintf(buf, sizeof(buf), "x=%d, y=%d, yaw=%.2f, vx=%d, vy=%d, w=%.2f\r\n",
              odom_state.x_mm,

@@ -125,7 +125,7 @@ static void core_usart_rx_error(en_core_usart_t id)
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
 {
     uint32_t i; /* 映射表游标 */
-#if UART_DEBUG
+	#if UART_DEBUG
     myprintf(buf, 64, "Rxsize=%u\n", size);
 #endif
 

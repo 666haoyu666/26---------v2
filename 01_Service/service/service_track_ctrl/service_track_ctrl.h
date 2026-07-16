@@ -11,6 +11,10 @@
 
 #include "platform_error.h"
 
+#define SERVER_CTRL_STACK_SIZE  2048U  /* 运动控制任务栈大小，字节 */
+#define SERVER_CTRL_TASK_PRIO   24U    /* 运动控制任务优先级 */
+#define SERVER_CTRL_PERIOD_MS   10U    /* 运动控制周期，ms */
+
 /** 循迹控制模式。 */
 typedef enum {
     TRACK_CTRL_MODE_STOP = 0,  /* 停止，speed_mm_s无效 */
@@ -19,6 +23,23 @@ typedef enum {
     TRACK_CTRL_MODE_TURN,      /* 转弯控制 */
     TRACK_CTRL_MODE_RSVD = 0x7FFFFFFF /* 保留，固定枚举宽度 */
 } track_ctrl_mode_t;
+
+/**
+ * @brief  初始化循迹控制状态并创建控制任务
+ * @retval PLATFORM_ERR_OK /
+ *         PLATFORM_ERR_ALREADY_INIT / PLATFORM_ERR_NO_MEMORY /
+ *         PLATFORM_ERR_NOT_INITIALIZED / PLATFORM_ERR_FAIL
+ * @note   调用前要求共享Port与里程计服务已就绪
+ */
+platform_err_t track_ctrl_init(void);
+
+/**
+ * @brief  停止控制任务并清除循迹控制状态
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_NOT_INITIALIZED /
+ *         PLATFORM_ERR_BUSY / PLATFORM_ERR_TIMEOUT / PLATFORM_ERR_FAIL
+ * @note   调用前须停止其他循迹控制API调用
+ */
+platform_err_t track_ctrl_deinit(void);
 
 /**
  * @brief  切换控制模式并设置该模式的目标速度
@@ -30,7 +51,8 @@ typedef enum {
  * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM /
  *         PLATFORM_ERR_NOT_INITIALIZED / PLATFORM_ERR_BUSY /
  *         PLATFORM_ERR_FAIL
- * @note   STOP模式仅接受0；成功后模式与速度同时生效
+ * @note   STOP模式仅接受0；航向输入会归一化到[-180, 180)；
+ *         成功后模式、航向与速度作为一条命令同拍生效
  */
 platform_err_t track_ctrl_set_mode(track_ctrl_mode_t mode,
                                    float target_yaw_deg,

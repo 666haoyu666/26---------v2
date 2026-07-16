@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F411xE</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../01_App/app/app_init/platform_io_register;../01_App/app/app_init/user_task_config;../01_App/app/app_isr_handlers;../01_App/app/app_main;../01_App/app/app_tracking;../01_Service/service/service_diff_odom;../01_Service/service/service_diff_odom/platform/motor;../01_Service/service/service_diff_odom/platform/imu;../02_Config;../02_Platform/platform_common;../02_Platform/platform_bsp/line_sensor/bsp_wrapper_line_sensor;../02_Platform/platform_bsp/line_sensor/bsp_adapter_port_line_sensor;../02_Platform/platform_bsp/motor/bsp_wrapper_motor;../02_Platform/platform_bsp/motor/bsp_adapter_port_motor;../02_Platform/platform_os/inc;../02_Platform/platform_os/os_wrapper/inc;../02_Platform/platform_os/os_implementation/freertos/inc;../02_Platform/platform_mcu/gpio/inc;../02_Platform/platform_mcu/pwm/inc;../02_Platform/platform_mcu/encoder/inc;../02_Platform/platform_mcu/timer/inc;../03_Bsp/bsp_line_sensor/Driver/Inc;../03_Bsp/bsp_motor/Driver/Inc;../03_Bsp/bsp_motor/handler/Inc;../03_Bsp/bsp_imu/inc;../02_Platform/platform_bsp/imu/bsp_wrapper_imu;../02_Platform/platform_bsp/imu/bsp_adapter_port_imu;../02_Platform/platform_mcu/usart/inc;../03_Middlewares/algorithm/pid;../99_Utils/common;../05_impl</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../01_App/app/app_init/platform_io_register;../01_App/app/app_init/user_task_config;../01_App/app/app_isr_handlers;../01_App/app/app_main;../01_App/app/app_tracking;../01_Service/service/service_diff_odom;../01_Service/service/service_diff_odom/platform/motor;../01_Service/service/service_diff_odom/platform/imu;..\01_Service\service\service_track_ctrl;../02_Config;../02_Platform/platform_common;../02_Platform/platform_bsp/line_sensor/bsp_wrapper_line_sensor;../02_Platform/platform_bsp/line_sensor/bsp_adapter_port_line_sensor;../02_Platform/platform_bsp/motor/bsp_wrapper_motor;../02_Platform/platform_bsp/motor/bsp_adapter_port_motor;../02_Platform/platform_os/inc;../02_Platform/platform_os/os_wrapper/inc;../02_Platform/platform_os/os_implementation/freertos/inc;../02_Platform/platform_mcu/gpio/inc;../02_Platform/platform_mcu/pwm/inc;../02_Platform/platform_mcu/encoder/inc;../02_Platform/platform_mcu/timer/inc;../03_Bsp/bsp_line_sensor/Driver/Inc;../03_Bsp/bsp_motor/Driver/Inc;../03_Bsp/bsp_motor/handler/Inc;../03_Bsp/bsp_imu/inc;../02_Platform/platform_bsp/imu/bsp_wrapper_imu;../02_Platform/platform_bsp/imu/bsp_adapter_port_imu;../02_Platform/platform_mcu/usart/inc;../03_Middlewares/algorithm/pid;../99_Utils/common;../05_impl;..\01_Service\service\service_track_ctrl\platform\imu_ctrl_port;..\01_Service\service\service_track_ctrl\platform\motor_ctrl_port;..\01_Service\service\service_track_ctrl\platform\track_port</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -419,6 +419,11 @@
               <FileType>1</FileType>
               <FilePath>../01_Service/service/service_diff_odom/service_diff_odom.c</FilePath>
             </File>
+            <File>
+              <FileName>service_track_ctrl.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Service\service\service_track_ctrl\service_track_ctrl.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -433,6 +438,21 @@
               <FileName>imu_port.c</FileName>
               <FileType>1</FileType>
               <FilePath>../01_Service/service/service_diff_odom/platform/imu/imu_port.c</FilePath>
+            </File>
+            <File>
+              <FileName>track_port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Service\service\service_track_ctrl\platform\track_port\track_port.c</FilePath>
+            </File>
+            <File>
+              <FileName>imu_ctrl_port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Service\service\service_track_ctrl\platform\imu_ctrl_port\imu_ctrl_port.c</FilePath>
+            </File>
+            <File>
+              <FileName>motor_ctrl_port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Service\service\service_track_ctrl\platform\motor_ctrl_port\motor_ctrl_port.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -936,5 +956,14 @@
     </components>
     <files/>
   </RTE>
+
+  <LayerInfo>
+    <Layers>
+      <Layer>
+        <LayName>FreeRTOS_Time</LayName>
+        <LayPrjMark>1</LayPrjMark>
+      </Layer>
+    </Layers>
+  </LayerInfo>
 
 </Project>

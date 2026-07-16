@@ -33,7 +33,7 @@
 #define BOARD_MOTOR_A_IO_IN1       (0U) /* io_port下标: PB12 AIN1 */
 #define BOARD_MOTOR_A_IO_IN2       (1U) /* io_port下标: PB13 AIN2 */
 #define BOARD_MOTOR_A_ENCODER      (EN_CORE_ENCODER_1) /* PB7/PB6 */
-#define BOARD_MOTOR_A_FWD_CW       (0U) /* 1=正输出为顺时针(前进) */
+#define BOARD_MOTOR_A_FWD_CW       (1U) /* 1=正输出为顺时针(前进) */
 #define BOARD_MOTOR_A_ENC_REVERSED (1U) /* 1=计数反相，待实测回填 */
 
 /* ---------------- B电机（右轮） ---------------- */
