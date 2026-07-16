@@ -25,6 +25,18 @@ typedef struct {
     float  right_mm_s;  /* 右轮目标速度，正值向前 */
 } motor_ctrl_target_t;
 
+/** 左右轮控制目标与反馈快照。 */
+typedef struct {
+    float    left_tgt_mm_s;  /* 左轮目标速度，mm/s */
+    float    right_tgt_mm_s; /* 右轮目标速度，mm/s */
+    float    left_act_mm_s;  /* 左轮反馈速度，mm/s */
+    float    right_act_mm_s; /* 右轮反馈速度，mm/s */
+    uint32_t left_fault;     /* 左轮锁存故障位 */
+    uint32_t right_fault;    /* 右轮锁存故障位 */
+    uint32_t left_run;       /* 左轮运行状态 */
+    uint32_t right_run;      /* 右轮运行状态 */
+} motor_ctrl_state_t;
+
 /**
  * @brief  绑定左右轮槽位并探测电机能力
  * @param  cfg 绑定配置，不可为NULL；槽位须有效且不同，
@@ -63,5 +75,13 @@ void motor_ctrl_stop(void);
  *         两轮经校验后依次应用，中途失败不回滚已应用目标
  */
 void motor_ctrl_set(float left_mm_s, float right_mm_s);
+
+/**
+ * @brief  读取左右轮目标、反馈与故障的同拍快照
+ * @param  state 输出状态，不可为NULL；失败时保持原值
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM /
+ *         PLATFORM_ERR_NOT_INITIALIZED / 底层错误
+ */
+platform_err_t motor_ctrl_get(motor_ctrl_state_t *state);
 
 #endif /* MOTOR_CTRL_PORT_H */

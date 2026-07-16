@@ -173,21 +173,74 @@ void StartDefaultTask(void *argument)
   }
 	osDelay(2000);
 
-  char buf[128];
-  track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR,
-                      0,200);
-  server_odom_state_t odom_state,last_odom_state;
-  track_port_result_t track_state;
-  float target_yaw = 0;
-  last_odom_state.x_mm = 0;
-  last_odom_state.y_mm = 0;
-  uint8_t uart_hz;
+  server_odom_state_t odom_state = {0};
+  server_odom_state_t last_odom_state = {0};
+  track_port_result_t track_state = {0};
+  float target_yaw = 0.0f;
+#if TRACK_TRACE_EN
+  static char buf[256];
+  static track_trace_t trace;
+  uint32_t log_fail = 0U;
+  uint32_t tx_drop;
+  platform_err_t log_st;
+#endif
+
+  if (PLATFORM_IS_ERR(track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR,
+                                          0.0f, 200)))
+  {
+    Error_Handler();
+  }
+
   for(;;)
   {
-    
-    
-    server_odom_get(&odom_state);
-    track_port_get(&track_state);
+#if TRACK_TRACE_EN
+    if (PLATFORM_IS_OK(track_ctrl_trace_get(&trace)))
+    {
+      tx_drop = myprintf_get_drop();
+      log_st = myprintf(
+          buf, sizeof(buf),
+          "%lu,%lu,%lu,%lu,%ld,%ld,%ld,%ld,%ld,"
+          "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,"
+          "%.2f,%.2f,%.2f,%.2f,%lu,%lu,%lu,%lu\r\n",
+          (unsigned long)trace.tick_ms,
+          (unsigned long)trace.cycle,
+          (unsigned long)trace.mode,
+          (unsigned long)trace.line_state,
+          (long)trace.port_st,
+          (long)trace.imu_st,
+          (long)trace.motor_st,
+          (long)trace.x_mm,
+          (long)trace.y_mm,
+          trace.yaw_deg,
+          trace.yaw_rate_deg_s,
+          trace.raw_err_mm,
+          trace.filt_err_mm,
+          trace.yaw_tgt_deg,
+          trace.yaw_err_deg,
+          trace.w_cmd_deg_s,
+          trace.v_cmd_mm_s,
+          trace.left_cmd_mm_s,
+          trace.right_cmd_mm_s,
+          trace.left_act_mm_s,
+          trace.right_act_mm_s,
+          (unsigned long)trace.left_fault,
+          (unsigned long)trace.right_fault,
+          (unsigned long)tx_drop,
+          (unsigned long)log_fail);
+      if (PLATFORM_IS_ERR(log_st))
+      {
+        log_fail++;
+      }
+    }
+#endif
+
+    if (PLATFORM_IS_ERR(server_odom_get(&odom_state)) ||
+        PLATFORM_IS_ERR(track_port_get(&track_state)))
+    {
+      osDelay(100);
+      continue;
+    }
+
     if(TRACK_PORT_NO_LINE   == track_state.state ||
        TRACK_PORT_AMBIGUOUS == track_state.state ){
       uint32_t distance;
@@ -197,17 +250,19 @@ void StartDefaultTask(void *argument)
                   (odom_state.y_mm - last_odom_state.y_mm);
       if (360000 > distance)
       {
-        
         osDelay(100);
         continue;
       }
-			
+
       last_odom_state = odom_state;
-      target_yaw+=90;
-      track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR,
-                      target_yaw,200);
+      target_yaw += 90.0f;
+      if (PLATFORM_IS_ERR(track_ctrl_set_mode(
+              TRACK_CTRL_MODE_TRACK_DIR, target_yaw, 200)))
+      {
+        Error_Handler();
+      }
     }
-    
+
     osDelay(100);
   }
   /* USER CODE END StartDefaultTask */

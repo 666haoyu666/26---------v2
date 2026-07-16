@@ -101,3 +101,37 @@ void motor_ctrl_set(float left_mm_s, float right_mm_s)
     targets[1].rps = right_mm_s / g_ctrl_cfg.right_mm_rev;
     (void)drv_adapter_motor_set_targets(targets, MOTOR_CTRL_WHEEL_NUM);
 }
+
+platform_err_t motor_ctrl_get(motor_ctrl_state_t *state)
+{
+    motor_drv_state_t left;     /* 左轮Wrapper状态 */
+    motor_drv_state_t right;    /* 右轮Wrapper状态 */
+    motor_ctrl_state_t snapshot; /* 单次完整输出快照 */
+    platform_err_t err;         /* Wrapper读取结果 */
+
+    if (state == NULL) {
+        return PLATFORM_ERR_PARAM;
+    }
+    if (g_ctrl_bound == 0U) {
+        return PLATFORM_ERR_NOT_INITIALIZED;
+    }
+
+    err = drv_adapter_motor_get_state(g_ctrl_cfg.left_id, &left);
+    if (PLATFORM_IS_OK(err)) {
+        err = drv_adapter_motor_get_state(g_ctrl_cfg.right_id, &right);
+    }
+    if (PLATFORM_IS_ERR(err)) {
+        return err;
+    }
+
+    snapshot.left_tgt_mm_s = left.target_rps * g_ctrl_cfg.left_mm_rev;
+    snapshot.right_tgt_mm_s = right.target_rps * g_ctrl_cfg.right_mm_rev;
+    snapshot.left_act_mm_s = left.rps * g_ctrl_cfg.left_mm_rev;
+    snapshot.right_act_mm_s = right.rps * g_ctrl_cfg.right_mm_rev;
+    snapshot.left_fault = left.fault_flags;
+    snapshot.right_fault = right.fault_flags;
+    snapshot.left_run = (uint32_t)left.run_state;
+    snapshot.right_run = (uint32_t)right.run_state;
+    *state = snapshot;
+    return PLATFORM_ERR_OK;
+}

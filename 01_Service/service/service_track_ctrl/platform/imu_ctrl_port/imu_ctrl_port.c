@@ -7,10 +7,12 @@
 
 #include "imu_ctrl_port.h"
 
+#include <stddef.h>
+
 #include "service_diff_odom.h"
 
 static uint8_t g_imu_ctrl_bound; /* 1=航向能力绑定有效 */
-static float   g_last_yaw_deg;   /* 最近一次有效航向，deg */
+static imu_ctrl_data_t g_last_data; /* 最近一次有效里程计快照 */
 
 platform_err_t imu_ctrl_init(void)
 {
@@ -27,7 +29,10 @@ platform_err_t imu_ctrl_init(void)
         return err;
     }
 
-    g_last_yaw_deg = probe.yaw_deg;
+    g_last_data.x_mm = probe.x_mm;
+    g_last_data.y_mm = probe.y_mm;
+    g_last_data.yaw_deg = probe.yaw_deg;
+    g_last_data.w_deg_s = probe.w_deg_s;
     g_imu_ctrl_bound = 1U;
     return PLATFORM_ERR_OK;
 }
@@ -39,25 +44,42 @@ platform_err_t imu_ctrl_deinit(void)
     }
 
     g_imu_ctrl_bound = 0U;
-    g_last_yaw_deg = 0.0f;
+    g_last_data = (imu_ctrl_data_t){0};
+    return PLATFORM_ERR_OK;
+}
+
+platform_err_t imu_ctrl_get_data(imu_ctrl_data_t *data)
+{
+    server_odom_state_t state; /* 里程计一致状态快照 */
+    platform_err_t err;        /* 底层读取结果 */
+
+    if (data == NULL) {
+        return PLATFORM_ERR_PARAM;
+    }
+
+    /* 所有失败路径均向控制器提供最近一次有效快照。 */
+    *data = g_last_data;
+    if (g_imu_ctrl_bound == 0U) {
+        return PLATFORM_ERR_NOT_INITIALIZED;
+    }
+
+    err = server_odom_get(&state);
+    if (PLATFORM_IS_ERR(err)) {
+        return err;
+    }
+
+    g_last_data.x_mm = state.x_mm;
+    g_last_data.y_mm = state.y_mm;
+    g_last_data.yaw_deg = state.yaw_deg;
+    g_last_data.w_deg_s = state.w_deg_s;
+    *data = g_last_data;
     return PLATFORM_ERR_OK;
 }
 
 float imu_ctrl_get(void)
 {
-    server_odom_state_t state; /* 里程计一致状态快照 */
-    platform_err_t err;        /* 底层读取结果 */
+    imu_ctrl_data_t data; /* 最近有效的航向快照 */
 
-    if (g_imu_ctrl_bound == 0U) {
-        return g_last_yaw_deg;
-    }
-
-    err = server_odom_get(&state);
-    if (PLATFORM_IS_ERR(err)) {
-        /* 读取失败冻结航向，避免向0跳变引发猛打角 */
-        return g_last_yaw_deg;
-    }
-
-    g_last_yaw_deg = state.yaw_deg;
-    return g_last_yaw_deg;
+    (void)imu_ctrl_get_data(&data);
+    return data.yaw_deg;
 }

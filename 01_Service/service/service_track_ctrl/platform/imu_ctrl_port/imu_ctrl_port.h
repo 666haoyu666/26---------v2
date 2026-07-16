@@ -13,6 +13,8 @@
 
 /** 循迹控制所需的航向状态。 */
 typedef struct {
+    int32_t x_mm;       /* 世界坐标X位置，mm */
+    int32_t y_mm;       /* 世界坐标Y位置，mm */
     float  yaw_deg;  /* 顺时针航向角，范围[-180, 180) */
     float  w_deg_s;  /* 顺时针航向角速度，单位度/秒 */
 } imu_ctrl_data_t;
@@ -31,6 +33,15 @@ platform_err_t imu_ctrl_init(void);
  * @note   不反初始化里程计服务
  */
 platform_err_t imu_ctrl_deinit(void);
+
+/**
+ * @brief  读取里程计同一解算拍的位置与航向快照
+ * @param  data 输出快照，不可为NULL
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM /
+ *         PLATFORM_ERR_NOT_INITIALIZED / 底层错误
+ * @note   读取失败时仍返回最近一次有效快照，便于控制冻结
+ */
+platform_err_t imu_ctrl_get_data(imu_ctrl_data_t *data);
 
 /**
  * @brief  读取里程计对齐后的顺时针航向角

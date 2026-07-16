@@ -64,7 +64,6 @@ platform_err_t track_port_get(track_port_result_t *result)
             result->state = TRACK_PORT_NO_LINE;
             return PLATFORM_ERR_OK;
         case BSP_LSENSOR_TRACKING:
-            /* 线在车体右侧(+)即车体在线左侧(-)，语义取反 */
             result->body_err_mm = raw.offset_mm;
             result->state = TRACK_PORT_VALID;
             return PLATFORM_ERR_OK;

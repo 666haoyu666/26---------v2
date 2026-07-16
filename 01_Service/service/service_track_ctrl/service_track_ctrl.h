@@ -15,6 +15,11 @@
 #define SERVER_CTRL_TASK_PRIO   24U    /* 运动控制任务优先级 */
 #define SERVER_CTRL_PERIOD_MS   10U    /* 运动控制周期，ms */
 
+/* 1=编译同拍控制插桩，0=移除快照与打印代码。 */
+#ifndef TRACK_TRACE_EN
+#define TRACK_TRACE_EN 1U
+#endif
+
 /** 循迹控制模式。 */
 typedef enum {
     TRACK_CTRL_MODE_STOP = 0,  /* 停止，speed_mm_s无效 */
@@ -23,6 +28,35 @@ typedef enum {
     TRACK_CTRL_MODE_TURN,      /* 转弯控制 */
     TRACK_CTRL_MODE_RSVD = 0x7FFFFFFF /* 保留，固定枚举宽度 */
 } track_ctrl_mode_t;
+
+#if TRACK_TRACE_EN
+/** 单个10ms控制周期内采集的完整插桩快照。 */
+typedef struct {
+    uint32_t tick_ms;         /* HAL uwTick采样时间，ms */
+    uint32_t cycle;           /* 控制周期递增序号 */
+    uint32_t mode;            /* track_ctrl_mode_t */
+    uint32_t line_state;      /* track_port_state_t */
+    int32_t  port_st;         /* 循迹Port读取状态 */
+    int32_t  imu_st;          /* 里程计快照读取状态 */
+    int32_t  motor_st;        /* 电机反馈读取状态 */
+    int32_t  x_mm;            /* 同拍里程计X位置 */
+    int32_t  y_mm;            /* 同拍里程计Y位置 */
+    float    yaw_deg;         /* 同拍航向角 */
+    float    yaw_rate_deg_s;  /* 同拍航向角速度 */
+    float    raw_err_mm;      /* 本拍原始二值质心误差 */
+    float    filt_err_mm;     /* 控制实际使用的滤波误差 */
+    float    yaw_tgt_deg;     /* 本拍目标航向 */
+    float    yaw_err_deg;     /* 归一化航向误差 */
+    float    w_cmd_deg_s;     /* 目标车体角速度 */
+    float    v_cmd_mm_s;      /* 目标车体前向速度 */
+    float    left_cmd_mm_s;   /* 本拍左轮下发目标 */
+    float    right_cmd_mm_s;  /* 本拍右轮下发目标 */
+    float    left_act_mm_s;   /* 左轮最近反馈速度 */
+    float    right_act_mm_s;  /* 右轮最近反馈速度 */
+    uint32_t left_fault;      /* 左轮故障位 */
+    uint32_t right_fault;     /* 右轮故障位 */
+} track_trace_t;
+#endif
 
 /**
  * @brief  初始化循迹控制状态并创建控制任务
@@ -57,5 +91,15 @@ platform_err_t track_ctrl_deinit(void);
 platform_err_t track_ctrl_set_mode(track_ctrl_mode_t mode,
                                    float target_yaw_deg,
                                    int32_t speed_mm_s);
+
+#if TRACK_TRACE_EN
+/**
+ * @brief  读取最近一个完整10ms控制周期的插桩快照
+ * @param  trace 输出快照，不可为NULL
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM /
+ *         PLATFORM_ERR_NOT_INITIALIZED / PLATFORM_ERR_NO_RESOURCE
+ */
+platform_err_t track_ctrl_trace_get(track_trace_t *trace);
+#endif
 
 #endif /* SERVICE_TRACK_CTRL_H */

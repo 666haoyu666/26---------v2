@@ -9,12 +9,12 @@
 #include "usart_port.h"
 
 #include "platform_def.h"
+#include "myprintf.h"
 #include "usart.h"
 
 #define UART_DEBUG 0
 
-#ifdef UART_DEBUG
-#include "myprintf.h"
+#if UART_DEBUG
 char buf[64];
 #endif
 
@@ -150,6 +150,13 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 #if UART_DEBUG
     myprintf(buf, 64, "ErrorCallback\n");
 #endif
+
+    if (huart == &huart6) {
+        if ((huart->ErrorCode & HAL_UART_ERROR_DMA) != 0U) {
+            myprintf_dma_err_isr();
+        }
+        return;
+    }
 
     for (i = 0U; i < (uint32_t)EN_CORE_USART_NUM; i++) {
         if (huart == s_usart_map[i]) {

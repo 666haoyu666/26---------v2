@@ -56,6 +56,25 @@ static float   g_target_v_mm_s = 0.0f;   /* 目标车体速度，mm/s */
 static osal_task_handle_t  g_track_task;  /* 控制任务句柄 */
 static osal_mutex_handle_t g_track_mutex; /* 命令三元组互斥锁 */
 
+#if TRACK_TRACE_EN
+/* 调试插桩直接使用HAL毫秒时间，仅在调试编译分支引用。 */
+extern volatile uint32_t uwTick;
+static volatile track_trace_t s_trace[2]; /* 双缓冲同拍快照 */
+static volatile uint8_t s_trace_idx;      /* 最近完整快照下标 */
+static volatile uint8_t s_trace_ready;    /* 1=至少发布过一拍 */
+
+/** @brief 单写者发布完整控制快照后原子切换可见下标。 */
+static void track_trace_pub(const track_trace_t *trace)
+{
+    uint8_t next; /* 本次写入的非活动缓冲下标 */
+
+    next = (uint8_t)(s_trace_idx ^ 1U);
+    s_trace[next] = *trace;
+    s_trace_idx = next;
+    s_trace_ready = 1U;
+}
+#endif
+
 /**
  * @brief  将OSAL状态码映射为平台统一状态码
  * @param  st OSAL返回状态
@@ -148,13 +167,18 @@ static float track_pid_calc(track_pid_t *pid, float err)
  * @retval 滤波后的车体横向误差，右正左负，mm
  * @note   端口读取失败时返回0，等效直行不修正
  */
-static float track_err_get(void)
+static float track_err_get(track_port_result_t *sample,
+                           platform_err_t *read_st)
 {
     static float track_err = 0.0f;   /* 滤波后的横向误差状态 */
     track_port_result_t track_state; /* 循迹端口采样结果 */
     platform_err_t err;              /* 端口读取状态 */
 
+    track_state.body_err_mm = 0.0f;
+    track_state.state = TRACK_PORT_NO_LINE;
     err = track_port_get(&track_state);
+    *read_st = err;
+    *sample = track_state;
     if (PLATFORM_IS_ERR(err)) {
         /* 端口未初始化或读取失败：放弃修正，直行最可预期 */
         return 0.0f;
@@ -184,14 +208,17 @@ static float track_err_get(void)
  * @param  v_mm_s  车体前向速度，mm/s，正值向前
  * @param  w_deg_s 车体角速度，deg/s，顺时针为正
  */
-static void track_apply_motion(float v_mm_s, float w_deg_s)
+static void track_apply_motion(float v_mm_s, float w_deg_s,
+                               float *left_cmd, float *right_cmd)
 {
     float diff_mm_s; /* 单侧差速分量，mm/s */
 
     /* 顺时针(w>0)转向时左轮在外圈，左加右减 */
     diff_mm_s = w_deg_s * TRACK_RAD_PER_DEG *
                 (TRACK_WHEEL_DIST_MM * 0.5f);
-    motor_ctrl_set(v_mm_s + diff_mm_s, v_mm_s - diff_mm_s);
+    *left_cmd = v_mm_s + diff_mm_s;
+    *right_cmd = v_mm_s - diff_mm_s;
+    motor_ctrl_set(*left_cmd, *right_cmd);
 }
 
 /** 维持SERVER_CTRL_PERIOD_MS控制周期；异常时挂起自身。 */
@@ -220,11 +247,24 @@ static void server_track_ctrl_task(void *argument)
     float yaw_tgt_deg;          /* 快照的目标航向，deg */
     float v_tgt_mm_s;           /* 快照的目标速度，mm/s */
     float yaw_tgt_prev;         /* 上周期目标航向，deg */
+    float v_cmd_mm_s;           /* 本拍实际车体速度命令 */
+    float left_cmd;             /* 本拍左轮目标速度 */
+    float right_cmd;            /* 本拍右轮目标速度 */
     uint8_t mode_now;           /* 快照的控制模式 */
     uint8_t mode_prev;          /* 上周期控制模式 */
+    track_port_result_t line_data; /* 本拍原始循迹结果 */
+    imu_ctrl_data_t imu_data;   /* 本拍里程计一致快照 */
     track_pid_t turn_pid;       /* TURN航向PID实例 */
     osal_tick_type_t last_wake; /* 上次周期唤醒tick */
     platform_err_t err;         /* 平台接口返回状态 */
+    platform_err_t port_st;     /* 循迹Port读取状态 */
+#if TRACK_TRACE_EN
+    motor_ctrl_state_t mot_data; /* 本拍电机反馈快照 */
+    track_trace_t trace;         /* 待发布的同拍插桩 */
+    platform_err_t imu_st;       /* 里程计快照读取状态 */
+    platform_err_t motor_st;     /* 电机反馈读取状态 */
+    uint32_t cycle;              /* 控制周期递增序号 */
+#endif
 
     (void)argument;
     mode_prev = (uint8_t)TRACK_CTRL_MODE_STOP;
@@ -237,6 +277,9 @@ static void server_track_ctrl_task(void *argument)
     turn_pid.integ_max = TRACK_TURN_I_MAX_DEG_S;
     track_pid_reset(&turn_pid, 0.0f);
     last_wake = osal_task_get_tick_count();
+#if TRACK_TRACE_EN
+    cycle = 0U;
+#endif
 
     while (1) {
         /* 锁内快照一次完整命令，解算全程使用本地副本 */
@@ -265,8 +308,18 @@ static void server_track_ctrl_task(void *argument)
             }
         }
 
-        track_err_now = track_err_get();
-        yaw_now_deg = imu_ctrl_get();
+        track_err_now = track_err_get(&line_data, &port_st);
+#if TRACK_TRACE_EN
+        imu_st = imu_ctrl_get_data(&imu_data);
+#else
+        (void)imu_ctrl_get_data(&imu_data);
+#endif
+        yaw_now_deg = imu_data.yaw_deg;
+        yaw_err_deg = 0.0f;
+        target_w = 0.0f;
+        v_cmd_mm_s = 0.0f;
+        left_cmd = 0.0f;
+        right_cmd = 0.0f;
 
         switch (mode_now) {
             case TRACK_CTRL_MODE_STOP:
@@ -280,9 +333,10 @@ static void server_track_ctrl_task(void *argument)
                 /* err右偏取负逆时针回线，yaw_err>0取正顺时针追向 */
                 target_w = TRACK_K2_YAW * yaw_err_deg -
                            TRACK_K1_ERR * (track_err_now + 
-                           TRACK_SENSOR_TO_WHEEL_MM * sinf(yaw_err_deg * TRACK_RAD_PER_DEG)) -
-                           track_err_now *0.4f;
-                track_apply_motion(v_tgt_mm_s, target_w);
+                           TRACK_SENSOR_TO_WHEEL_MM * sinf(yaw_err_deg * TRACK_RAD_PER_DEG));
+                v_cmd_mm_s = v_tgt_mm_s;
+                track_apply_motion(v_cmd_mm_s, target_w,
+                                   &left_cmd, &right_cmd);
                 break;
             case TRACK_CTRL_MODE_TRACK:
                 /* 纯巡线模式：仅PID跟线 */
@@ -298,12 +352,43 @@ static void server_track_ctrl_task(void *argument)
                     track_pid_reset(&turn_pid, yaw_err_deg);
                 }
                 target_w = track_pid_calc(&turn_pid, yaw_err_deg);
-                track_apply_motion(TRACK_TURN_LINEAR_VEL_COMP,
-                                   target_w);
+                v_cmd_mm_s = TRACK_TURN_LINEAR_VEL_COMP;
+                track_apply_motion(v_cmd_mm_s, target_w,
+                                   &left_cmd, &right_cmd);
                 break;
             default:
                 break;
         }
+
+#if TRACK_TRACE_EN
+        mot_data = (motor_ctrl_state_t){0};
+        motor_st = motor_ctrl_get(&mot_data);
+        cycle++;
+        trace.tick_ms = uwTick;
+        trace.cycle = cycle;
+        trace.mode = (uint32_t)mode_now;
+        trace.line_state = (uint32_t)line_data.state;
+        trace.port_st = (int32_t)port_st;
+        trace.imu_st = (int32_t)imu_st;
+        trace.motor_st = (int32_t)motor_st;
+        trace.x_mm = imu_data.x_mm;
+        trace.y_mm = imu_data.y_mm;
+        trace.yaw_deg = imu_data.yaw_deg;
+        trace.yaw_rate_deg_s = imu_data.w_deg_s;
+        trace.raw_err_mm = line_data.body_err_mm;
+        trace.filt_err_mm = track_err_now;
+        trace.yaw_tgt_deg = yaw_tgt_deg;
+        trace.yaw_err_deg = yaw_err_deg;
+        trace.w_cmd_deg_s = target_w;
+        trace.v_cmd_mm_s = v_cmd_mm_s;
+        trace.left_cmd_mm_s = left_cmd;
+        trace.right_cmd_mm_s = right_cmd;
+        trace.left_act_mm_s = mot_data.left_act_mm_s;
+        trace.right_act_mm_s = mot_data.right_act_mm_s;
+        trace.left_fault = mot_data.left_fault;
+        trace.right_fault = mot_data.right_fault;
+        track_trace_pub(&trace);
+#endif
 
         /* 历史状态延至此更新，供TURN分支识别新命令做复位 */
         mode_prev = mode_now;
@@ -335,6 +420,10 @@ platform_err_t track_ctrl_init(void)
     g_track_state = (uint8_t)TRACK_CTRL_MODE_STOP;
     g_target_yaw_deg = 0.0f;
     g_target_v_mm_s = 0.0f;
+#if TRACK_TRACE_EN
+    s_trace_idx = 0U;
+    s_trace_ready = 0U;
+#endif
 
     err = track_map_osal(osal_task_create("track_ctrl",
                                           server_track_ctrl_task,
@@ -374,6 +463,9 @@ platform_err_t track_ctrl_deinit(void)
     g_track_state = (uint8_t)TRACK_CTRL_MODE_STOP;
     g_target_yaw_deg = 0.0f;
     g_target_v_mm_s = 0.0f;
+#if TRACK_TRACE_EN
+    s_trace_ready = 0U;
+#endif
 
     err = track_map_osal(osal_mutex_give(g_track_mutex));
     (void)osal_mutex_delete(g_track_mutex);
@@ -432,3 +524,31 @@ platform_err_t track_ctrl_set_mode(track_ctrl_mode_t mode,
 
     return track_map_osal(osal_mutex_give(g_track_mutex));
 }
+
+#if TRACK_TRACE_EN
+platform_err_t track_ctrl_trace_get(track_trace_t *trace)
+{
+    track_trace_t snapshot; /* 最近完整快照的本地副本 */
+    uint8_t idx_before;     /* 复制前的活动下标 */
+    uint8_t idx_after;      /* 复制后的活动下标 */
+
+    if (trace == NULL) {
+        return PLATFORM_ERR_PARAM;
+    }
+    if (g_track_ctrl_inited == 0U) {
+        return PLATFORM_ERR_NOT_INITIALIZED;
+    }
+    if (s_trace_ready == 0U) {
+        return PLATFORM_ERR_NO_RESOURCE;
+    }
+
+    do {
+        idx_before = s_trace_idx;
+        snapshot = s_trace[idx_before];
+        idx_after = s_trace_idx;
+    } while (idx_before != idx_after);
+
+    *trace = snapshot;
+    return PLATFORM_ERR_OK;
+}
+#endif
