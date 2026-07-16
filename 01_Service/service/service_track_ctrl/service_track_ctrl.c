@@ -34,7 +34,7 @@
 #define TRACK_TURN_KI              0.0f   /* 转向积分，0即纯PD，待整定 */
 #define TRACK_TURN_KD              3.5f   /* 转向微分增益，待整定 */
 #define TRACK_TURN_W_MAX_DEG_S     360.0f /* 转向角速度限幅，待整定 */
-#define TRACK_TURN_I_MAX_DEG_S     90.0f  /* 转向积分项限幅，待整定 */
+#define TRACK_TURN_I_MAX_DEG_S     20.0f  /* 转向积分项限幅，待整定 */
 #define TRACK_PID_DT_S (SERVER_CTRL_PERIOD_MS / 1000.0f) /* 控制周期，s */
 
 /** 位置式PID参数与运行状态。 */
