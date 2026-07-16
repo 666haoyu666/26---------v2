@@ -17,6 +17,7 @@
 #include "osal_mutex.h"
 #include "osal_task.h"
 
+
 #define TRACK_ERR_LPF_ALPHA        0.2f   /* 循迹模块低通滤波系数 */
 #define TRACK_ERR_SOS_MM           10.0f  /* 循迹危险阈值 */
 #define TRACK_YAW_PERIOD_DEG       360.0f /* 航向角周期，deg */
@@ -279,7 +280,8 @@ static void server_track_ctrl_task(void *argument)
                 /* err右偏取负逆时针回线，yaw_err>0取正顺时针追向 */
                 target_w = TRACK_K2_YAW * yaw_err_deg -
                            TRACK_K1_ERR * (track_err_now + 
-                           TRACK_SENSOR_TO_WHEEL_MM * sinf(yaw_err_deg * TRACK_RAD_PER_DEG));
+                           TRACK_SENSOR_TO_WHEEL_MM * sinf(yaw_err_deg * TRACK_RAD_PER_DEG)) -
+                           track_err_now *0.4f;
                 track_apply_motion(v_tgt_mm_s, target_w);
                 break;
             case TRACK_CTRL_MODE_TRACK:

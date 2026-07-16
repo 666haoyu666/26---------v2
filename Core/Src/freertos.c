@@ -174,19 +174,40 @@ void StartDefaultTask(void *argument)
 	osDelay(2000);
 
   char buf[128];
-  track_ctrl_set_mode(TRACK_CTRL_MODE_TURN,
-                      90,200);
-  server_odom_state_t odom_state;
+  track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR,
+                      0,200);
+  server_odom_state_t odom_state,last_odom_state;
+  track_port_result_t track_state;
+  float target_yaw = 0;
+  last_odom_state.x_mm = 0;
+  last_odom_state.y_mm = 0;
+  uint8_t uart_hz;
   for(;;)
   {
+    
+    
     server_odom_get(&odom_state);
-    myprintf(buf, sizeof(buf), "x=%d, y=%d, yaw=%.2f, vx=%d, vy=%d, w=%.2f\r\n",
-             odom_state.x_mm,
-             odom_state.y_mm,
-             odom_state.yaw_deg,
-             odom_state.vx_mm_s,
-             odom_state.vy_mm_s,
-             odom_state.w_deg_s);
+    track_port_get(&track_state);
+    if(TRACK_PORT_NO_LINE   == track_state.state ||
+       TRACK_PORT_AMBIGUOUS == track_state.state ){
+      uint32_t distance;
+      distance =  (odom_state.x_mm - last_odom_state.x_mm) *
+                  (odom_state.x_mm - last_odom_state.x_mm) +
+                  (odom_state.y_mm - last_odom_state.y_mm) *
+                  (odom_state.y_mm - last_odom_state.y_mm);
+      if (360000 > distance)
+      {
+        
+        osDelay(100);
+        continue;
+      }
+			
+      last_odom_state = odom_state;
+      target_yaw+=90;
+      track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR,
+                      target_yaw,200);
+    }
+    
     osDelay(100);
   }
   /* USER CODE END StartDefaultTask */
