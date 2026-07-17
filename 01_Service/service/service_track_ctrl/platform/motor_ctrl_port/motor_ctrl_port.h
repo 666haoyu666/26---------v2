@@ -31,6 +31,8 @@ typedef struct {
     float    right_tgt_mm_s; /* 右轮目标速度，mm/s */
     float    left_act_mm_s;  /* 左轮反馈速度，mm/s */
     float    right_act_mm_s; /* 右轮反馈速度，mm/s */
+    int32_t  left_duty;      /* 左轮当前PWM原始输出 */
+    int32_t  right_duty;     /* 右轮当前PWM原始输出 */
     uint32_t left_fault;     /* 左轮锁存故障位 */
     uint32_t right_fault;    /* 右轮锁存故障位 */
     uint32_t left_run;       /* 左轮运行状态 */
@@ -62,6 +64,13 @@ platform_err_t motor_ctrl_deinit(void);
 platform_err_t motor_ctrl_start(void);
 
 /**
+ * @brief  仅使能左轮速度闭环，其他轮槽位状态保持不变
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_NOT_INITIALIZED / 底层错误
+ * @note   左轮物理槽位来自motor_ctrl_init()绑定配置
+ */
+platform_err_t motor_left_start(void);
+
+/**
  * @brief  失能电机输出并进入滑行状态，尽力而为
  * @note   作用于全部已注册电机槽位；未初始化时静默返回
  */
@@ -75,6 +84,14 @@ void motor_ctrl_stop(void);
  *         两轮经校验后依次应用，中途失败不回滚已应用目标
  */
 void motor_ctrl_set(float left_mm_s, float right_mm_s);
+
+/**
+ * @brief  换算并下发左轮目标速度，右轮目标保持不变
+ * @param  left_mm_s 左轮目标速度，mm/s，须为有限值
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM /
+ *         PLATFORM_ERR_NOT_INITIALIZED / 底层错误
+ */
+platform_err_t motor_left_set(float left_mm_s);
 
 /**
  * @brief  读取左右轮目标、反馈与故障的同拍快照

@@ -26,6 +26,7 @@ typedef enum {
     TRACK_CTRL_MODE_TRACK_DIR, /* 按已知循线方向循迹 */
     TRACK_CTRL_MODE_TRACK,     /* 纯循迹，由算法自行判断方向 */
     TRACK_CTRL_MODE_TURN,      /* 转弯控制 */
+    TRACK_CTRL_MODE_MOTOR_A,   /* A左轮单轮速度内环标定 */
     TRACK_CTRL_MODE_RSVD = 0x7FFFFFFF /* 保留，固定枚举宽度 */
 } track_ctrl_mode_t;
 
@@ -53,6 +54,8 @@ typedef struct {
     float    right_cmd_mm_s;  /* 本拍右轮下发目标 */
     float    left_act_mm_s;   /* 左轮最近反馈速度 */
     float    right_act_mm_s;  /* 右轮最近反馈速度 */
+    int32_t  left_duty;       /* 左轮当前PWM原始输出 */
+    int32_t  right_duty;      /* 右轮当前PWM原始输出 */
     uint32_t left_fault;      /* 左轮故障位 */
     uint32_t right_fault;     /* 右轮故障位 */
 } track_trace_t;
@@ -81,7 +84,8 @@ platform_err_t track_ctrl_deinit(void);
  *                    STOP模式下 speed_mm_s无效
  * @param  target_yaw_deg 转向模式下的目标航向角，单位度；
  *                        仅在TURN和TRACK_DIR模式下有效，范围[-180, 180)；
- * @param  speed_mm_s 车体目标速度，单位mm/s；正向前进，负向后退
+ * @param  speed_mm_s 车体目标速度，单位mm/s；正向前进，负向后退；
+ *                    MOTOR_A模式下表示A左轮单轮目标速度
  * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM /
  *         PLATFORM_ERR_NOT_INITIALIZED / PLATFORM_ERR_BUSY /
  *         PLATFORM_ERR_FAIL

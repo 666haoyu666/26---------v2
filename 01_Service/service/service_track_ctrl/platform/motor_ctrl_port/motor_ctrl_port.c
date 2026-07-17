@@ -73,6 +73,15 @@ platform_err_t motor_ctrl_start(void)
     return drv_adapter_motor_start();
 }
 
+platform_err_t motor_left_start(void)
+{
+    if (g_ctrl_bound == 0U) {
+        return PLATFORM_ERR_NOT_INITIALIZED;
+    }
+
+    return bsp_motor_start(g_ctrl_cfg.left_id);
+}
+
 void motor_ctrl_stop(void)
 {
     if (g_ctrl_bound == 0U) {
@@ -102,6 +111,22 @@ void motor_ctrl_set(float left_mm_s, float right_mm_s)
     (void)drv_adapter_motor_set_targets(targets, MOTOR_CTRL_WHEEL_NUM);
 }
 
+platform_err_t motor_left_set(float left_mm_s)
+{
+    float rps; /* 左轮输出轴目标转速 */
+
+    if (g_ctrl_bound == 0U) {
+        return PLATFORM_ERR_NOT_INITIALIZED;
+    }
+    if (!isfinite(left_mm_s)) {
+        return PLATFORM_ERR_PARAM;
+    }
+
+    /* mm/s除以左轮每转行程得输出轴RPS，仅下发左轮槽位。 */
+    rps = left_mm_s / g_ctrl_cfg.left_mm_rev;
+    return drv_adapter_motor_set_rps(g_ctrl_cfg.left_id, rps);
+}
+
 platform_err_t motor_ctrl_get(motor_ctrl_state_t *state)
 {
     motor_drv_state_t left;     /* 左轮Wrapper状态 */
@@ -128,6 +153,8 @@ platform_err_t motor_ctrl_get(motor_ctrl_state_t *state)
     snapshot.right_tgt_mm_s = right.target_rps * g_ctrl_cfg.right_mm_rev;
     snapshot.left_act_mm_s = left.rps * g_ctrl_cfg.left_mm_rev;
     snapshot.right_act_mm_s = right.rps * g_ctrl_cfg.right_mm_rev;
+    snapshot.left_duty = left.applied_duty;
+    snapshot.right_duty = right.applied_duty;
     snapshot.left_fault = left.fault_flags;
     snapshot.right_fault = right.fault_flags;
     snapshot.left_run = (uint32_t)left.run_state;

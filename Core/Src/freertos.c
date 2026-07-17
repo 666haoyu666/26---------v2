@@ -27,11 +27,9 @@
 /* USER CODE BEGIN Includes */
 #include "user_periph_setup.h"
 
+#include "app_tracking_task.h"
 #include "board_motor_config.h"
-#include "bsp_wrapper_motor.h"
-#include "myprintf.h"
 #include "service_diff_odom.h"
-#include "bsp_wrapper_imu.h"
 #include "service_track_ctrl.h"
 #include "motor_ctrl_port.h"
 #include "imu_ctrl_port.h"
@@ -45,12 +43,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-/* Odom演示标定：轮径为占位值，实测后回填 */
-#define ODOM_DEMO_WHEEL_DIA_MM (65.0f)
-#define ODOM_DEMO_MM_TICK      (ODOM_DEMO_WHEEL_DIA_MM * 3.1415927f / \
-                                (float)BOARD_MOTOR_CPR)
-/* 循迹控制装配：每转行程随轮径实测同步更新 */
-#define CTRL_DEMO_MM_REV       (ODOM_DEMO_WHEEL_DIA_MM * 3.1415927f)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -140,8 +132,8 @@ void StartDefaultTask(void *argument)
   server_odom_cfg_t odom_cfg;
   odom_cfg.left_id = BOARD_MOTOR_A_SLOT;
   odom_cfg.right_id = BOARD_MOTOR_B_SLOT;
-  odom_cfg.left_mm_tick = ODOM_DEMO_MM_TICK;
-  odom_cfg.right_mm_tick = ODOM_DEMO_MM_TICK;
+  odom_cfg.left_mm_tick = BOARD_MOTOR_MM_TICK;
+  odom_cfg.right_mm_tick = BOARD_MOTOR_MM_TICK;
   odom_cfg.left_sign = 1;
   odom_cfg.right_sign = 1;
   if (PLATFORM_IS_ERR(server_odom_init(&odom_cfg)))
@@ -153,8 +145,8 @@ void StartDefaultTask(void *argument)
   motor_ctrl_cfg_t ctrl_cfg;
   ctrl_cfg.left_id = BOARD_MOTOR_A_SLOT;
   ctrl_cfg.right_id = BOARD_MOTOR_B_SLOT;
-  ctrl_cfg.left_mm_rev = CTRL_DEMO_MM_REV;
-  ctrl_cfg.right_mm_rev = CTRL_DEMO_MM_REV;
+  ctrl_cfg.left_mm_rev = BOARD_MOTOR_MM_REV;
+  ctrl_cfg.right_mm_rev = BOARD_MOTOR_MM_REV;
   if (PLATFORM_IS_ERR(motor_ctrl_init(&ctrl_cfg)))
   {
     Error_Handler();
@@ -171,99 +163,17 @@ void StartDefaultTask(void *argument)
   {
     Error_Handler();
   }
-	osDelay(2000);
 
-  server_odom_state_t odom_state = {0};
-  server_odom_state_t last_odom_state = {0};
-  track_port_result_t track_state = {0};
-  float target_yaw = 0.0f;
-#if TRACK_TRACE_EN
-  static char buf[256];
-  static track_trace_t trace;
-  uint32_t log_fail = 0U;
-  uint32_t tx_drop;
-  platform_err_t log_st;
-#endif
-
-  if (PLATFORM_IS_ERR(track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR,
-                                          0.0f, 200)))
+  /* 上电静置2s后执行一次A左轮速度阶跃，完成后保持STOP。 */
+  osDelay(2000);
+  if (PLATFORM_IS_ERR(app_motor_tune_run()))
   {
     Error_Handler();
   }
 
   for(;;)
   {
-#if TRACK_TRACE_EN
-    if (PLATFORM_IS_OK(track_ctrl_trace_get(&trace)))
-    {
-      tx_drop = myprintf_get_drop();
-      log_st = myprintf(
-          buf, sizeof(buf),
-          "%lu,%lu,%lu,%lu,%ld,%ld,%ld,%ld,%ld,"
-          "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,"
-          "%.2f,%.2f,%.2f,%.2f,%lu,%lu,%lu,%lu\r\n",
-          (unsigned long)trace.tick_ms,
-          (unsigned long)trace.cycle,
-          (unsigned long)trace.mode,
-          (unsigned long)trace.line_state,
-          (long)trace.port_st,
-          (long)trace.imu_st,
-          (long)trace.motor_st,
-          (long)trace.x_mm,
-          (long)trace.y_mm,
-          trace.yaw_deg,
-          trace.yaw_rate_deg_s,
-          trace.raw_err_mm,
-          trace.filt_err_mm,
-          trace.yaw_tgt_deg,
-          trace.yaw_err_deg,
-          trace.w_cmd_deg_s,
-          trace.v_cmd_mm_s,
-          trace.left_cmd_mm_s,
-          trace.right_cmd_mm_s,
-          trace.left_act_mm_s,
-          trace.right_act_mm_s,
-          (unsigned long)trace.left_fault,
-          (unsigned long)trace.right_fault,
-          (unsigned long)tx_drop,
-          (unsigned long)log_fail);
-      if (PLATFORM_IS_ERR(log_st))
-      {
-        log_fail++;
-      }
-    }
-#endif
-
-    if (PLATFORM_IS_ERR(server_odom_get(&odom_state)) ||
-        PLATFORM_IS_ERR(track_port_get(&track_state)))
-    {
-      osDelay(100);
-      continue;
-    }
-
-    if(TRACK_PORT_NO_LINE   == track_state.state ||
-       TRACK_PORT_AMBIGUOUS == track_state.state ){
-      uint32_t distance;
-      distance =  (odom_state.x_mm - last_odom_state.x_mm) *
-                  (odom_state.x_mm - last_odom_state.x_mm) +
-                  (odom_state.y_mm - last_odom_state.y_mm) *
-                  (odom_state.y_mm - last_odom_state.y_mm);
-      if (360000 > distance)
-      {
-        osDelay(100);
-        continue;
-      }
-
-      last_odom_state = odom_state;
-      target_yaw += 90.0f;
-      if (PLATFORM_IS_ERR(track_ctrl_set_mode(
-              TRACK_CTRL_MODE_TRACK_DIR, target_yaw, 200)))
-      {
-        Error_Handler();
-      }
-    }
-
-    osDelay(100);
+    osDelay(1000);
   }
   /* USER CODE END StartDefaultTask */
 }
