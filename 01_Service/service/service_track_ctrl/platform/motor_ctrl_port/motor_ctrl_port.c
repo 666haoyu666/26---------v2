@@ -98,7 +98,7 @@ void motor_ctrl_set(float left_mm_s, float right_mm_s)
     targets[0].id = g_ctrl_cfg.left_id;
     targets[0].rps = left_mm_s / g_ctrl_cfg.left_mm_rev;
     targets[1].id = g_ctrl_cfg.right_id;
-    targets[1].rps = right_mm_s / g_ctrl_cfg.right_mm_rev;
+    targets[1].rps = (right_mm_s / g_ctrl_cfg.right_mm_rev)*1.0f;
     (void)drv_adapter_motor_set_targets(targets, MOTOR_CTRL_WHEEL_NUM);
 }
 

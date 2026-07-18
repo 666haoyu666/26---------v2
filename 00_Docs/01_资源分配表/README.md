@@ -25,19 +25,25 @@
 | B 方向 IN1 / IN2 | PB14 / PB15 | `core_io` 2 / 3 | 同上 |
 | A PWM | TIM1_CH2 (PA9) | `EN_CORE_PWM_MOTOR_A` | ARR=9999，约 10kHz |
 | B PWM | TIM1_CH1 (PA8) | `EN_CORE_PWM_MOTOR_B` | 同上 |
-| A 编码器 | E1A=PB7, E1B=PB6 | `EN_CORE_ENCODER_1` | EXTI 双边沿 4 倍频 |
-| B 编码器 | E2A=PB5, E2B=PB4 | `EN_CORE_ENCODER_2` | 同上 |
+| A 编码器 | A=PB7(EXTI 上升沿), B=PB6(输入) | `EN_CORE_ENCODER_1` | A 相上升沿 1 倍频采 B 相 |
+| B 编码器 | A=PB5(EXTI 上升沿), B=PB4(输入) | `EN_CORE_ENCODER_2` | 同上 |
 | 控制节拍 | TIM9 更新中断 | `EN_CORE_TIMER_CTRL_10MS` | 10ms，NVIC 优先级 5 |
-| 编码器中断 | EXTI9_5 / EXTI4 | —（encoder_port 持有） | NVIC 优先级 5 |
+| 编码器中断 | EXTI9_5（仅 PB7/PB5） | —（encoder_port 持有） | NVIC 优先级 5 |
 
 约束与约定：
 
 - **EXTI 与 TIM9 必须同 NVIC 优先级(5)**：编码器计数 ISR 与 10ms
   控制 ISR 互不抢占，计数累加与读清零才无竞争。改动任一优先级
   必须同步评审 `encoder_port.c` 与 `bsp_adapter_port_motor.c`。
-- EXTI4/EXTI9_5 的 IRQHandler 与 `HAL_GPIO_EXTI_Callback` 由
-  `encoder_port.c` 持有（.ioc 未勾选 EXTI NVIC）。若在 CubeMX 勾选
-  NVIC 重新生成，会产生重复定义，必须删除其中一份。
+- `EXTI9_5_IRQHandler` 由 `encoder_port.c` 持有（.ioc 未勾选 EXTI
+  NVIC），ISR 内直读直清 EXTI->PR 且只动 PB7/PB5 两条线，不经 HAL
+  回调链。若在 CubeMX 勾选 NVIC 重新生成，会产生重复定义，必须
+  删除其中一份；后续新增线 5..9 的 EXTI 需求要在此扩展路由。
+- 编码器解码为 A 相上升沿 1 倍频（高 CPR 电机 40904 脉冲/转@4x，
+  1x 后 10226 计数/转，中断量为 4x 的四分之一）。B 相在 A 上升沿
+  时采样：B 低=+1、B 高=-1，极性由 `BOARD_MOTOR_x_ENC_REVERSED` 修正。
+- 标签债务：main.h 中 PB6 宏名为 `PB6_E2B_Pin`，物理上是编码器 1
+  （左轮 A 电机）的 B 相，.ioc 标签待纠正为 E1B。
 - `HAL_TIM_PeriodElapsedCallback` 由 `timer_port.c` 唯一持有并统一
   分发（含 TIM11 HAL 时基喂 tick）。**CubeMX 重新生成 main.c 会再
   生成同名函数导致重复定义链接错误，必须删除 main.c 那份。**

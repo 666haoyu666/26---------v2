@@ -16,15 +16,16 @@
 
 #define BOARD_MOTOR_TICK_TIMER (EN_CORE_TIMER_CTRL_10MS) /* 控制节拍 */
 #define BOARD_MOTOR_TICK_S     (0.010f)  /* 节拍周期s，与TIM9一致 */
-#define BOARD_MOTOR_CPR        (1061U)   /* 输出轴每圈计数(4倍频) */
+#define BOARD_MOTOR_CPR        (10226U) /* 输出轴每圈计数， */
+                                        /* A相上升沿1倍频(=40904/4) */
 
-/* PWM满幅不在此配置：Adapter初始化时经core_pwm_get_max() */
+/* PWM满幅不在此配置：Adapter初始化时经core_pwm_get_max() *
 /* 运行期读取定时器ARR，跟随CubeMX配置自动适应 */
 
-#define BOARD_MOTOR_PID_KP     (300.0f)  /* 速度环比例，待实测回填 */
-#define BOARD_MOTOR_PID_KI     (50.0f)   /* 速度环积分，待实测回填 */
+#define BOARD_MOTOR_PID_KP     (0.0f)  /* 速度环比例，待实测回填 */
+#define BOARD_MOTOR_PID_KI     (0.0f)   /* 速度环积分，待实测回填 */
 #define BOARD_MOTOR_PID_KD     (0.0f)    /* 速度环微分，待实测回填 */
-#define BOARD_MOTOR_PID_ILIMIT (7500.0f) /* 积分限幅，待实测回填 */
+#define BOARD_MOTOR_PID_ILIMIT (1000.0f) /* 积分限幅，待实测回填 */
 
 /* ---------------- A电机（左轮） ---------------- */
 

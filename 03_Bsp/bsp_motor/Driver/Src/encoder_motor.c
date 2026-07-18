@@ -8,7 +8,7 @@
 
 #include "encoder_motor.h"
 
-#define ENCODER_SPEED_LPF_ALPHA_DEFAULT 0.25f
+#define ENCODER_SPEED_LPF_ALPHA_DEFAULT 1.0f
 
 /**
  * @brief 实例化编码器对象

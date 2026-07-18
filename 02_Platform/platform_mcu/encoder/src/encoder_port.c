@@ -1,14 +1,19 @@
 /**
  * @file    encoder_port.c
- * @brief   MCU正交编码器Port实现（STM32F411 HAL，EXTI双边沿4倍频）
+ * @brief   MCU编码器Port实现（STM32F411，A相上升沿1倍频解码）
  * @note    - 逻辑ID=映射表下标，映射唯一依据《核心引脚分配表》
- *          - 引脚模式(双边沿EXTI)由MX_GPIO_Init配置，本层不重复初始化
- *          - .ioc未勾选EXTI的NVIC，故EXTI4/EXTI9_5的IRQHandler与
- *            HAL_GPIO_EXTI_Callback由本层唯一持有；若日后在CubeMX
- *            勾选NVIC生成同名函数，必须删除其中一份
+ *          - 引脚模式由MX_GPIO_Init配置：A相(PB7/PB5)上升沿EXTI，
+ *            B相(PB6/PB4)普通输入，本层不重复初始化
+ *          - 高CPR电机（约10226计数/转）中断量大，ISR走EXTI->PR与
+ *            IDR直读，不经HAL_GPIO_EXTI_IRQHandler回调链，最短中断
+ *          - .ioc未勾选EXTI的NVIC，EXTI9_5_IRQHandler由本层唯一
+ *            持有；若日后CubeMX勾选NVIC生成同名函数，必须删除一份；
+ *            后续非编码器EXTI(线5..9)需求也在此扩展路由
  *          - NVIC优先级固定为ENC_EXTI_NVIC_PRIO，必须与TIM9控制节拍
  *            相同：EXTI计数ISR与10ms控制ISR互不抢占，编码器计数的
  *            累加(读改写)与读清零才无竞争
+ *          - 板级标签注意：main.h中PB6宏名为PB6_E2B_Pin，物理上是
+ *            编码器1(左轮A电机)的B相，.ioc标签待纠正
  */
 
 #include "encoder_port.h"
@@ -17,47 +22,29 @@
 #include "platform_def.h"
 
 /** EXTI的NVIC抢占优先级，必须与TIM9(TIM1_BRK_TIM9_IRQn)一致。 */
-#define ENC_EXTI_NVIC_PRIO (5U)
+#define ENC_EXTI_NVIC_PRIO (4U)
 
-/** 单编码器最多占用的EXTI中断线数。 */
-#define ENC_IRQN_MAX (2U)
+/** 本层持有的EXTI9_5线掩码：E1A=PB7与E2A=PB5。 */
+#define ENC_EXTI9_5_MASK ((uint32_t)(PB7_E1A_Pin | PB5_E2A_Pin))
 
-/** 逻辑编码器到物理引脚/EXTI中断线的映射项。 */
+/** 逻辑编码器到物理引脚的映射项；A相=EXTI上升沿，B相=普通输入。 */
 typedef struct {
-    GPIO_TypeDef *port_a;              /* A相GPIO端口 */
-    uint16_t      pin_a;               /* A相HAL引脚掩码 */
-    GPIO_TypeDef *port_b;              /* B相GPIO端口 */
-    uint16_t      pin_b;               /* B相HAL引脚掩码 */
-    IRQn_Type     irqn[ENC_IRQN_MAX];  /* 占用的EXTI中断线 */
-    uint8_t       irqn_cnt;            /* 有效中断线数 */
+    GPIO_TypeDef *port_a; /* A相GPIO端口 */
+    uint16_t      pin_a;  /* A相HAL引脚掩码，=EXTI线位 */
+    GPIO_TypeDef *port_b; /* B相GPIO端口 */
+    uint16_t      pin_b;  /* B相HAL引脚掩码 */
+    IRQn_Type     irqn;   /* A相所在EXTI中断线 */
 } encoder_map_t;
 
 /** 逻辑编码器表，ID=下标。 */
 static const encoder_map_t s_enc_map[EN_CORE_ENCODER_NUM] = {
-    /* EN_CORE_ENCODER_1：E1A=PB7,E1B=PB6，同在EXTI9_5 */
+    /* EN_CORE_ENCODER_1：A=PB7，B=PB6(宏名E2B，物理E1的B相) */
     { PB7_E1A_GPIO_Port, PB7_E1A_Pin,
-      PB6_E1B_GPIO_Port, PB6_E1B_Pin,
-      { EXTI9_5_IRQn, EXTI9_5_IRQn }, 1U },
-    /* EN_CORE_ENCODER_2：E2A=PB5(EXTI9_5),E2B=PB4(EXTI4) */
+      PB6_E2B_GPIO_Port, PB6_E2B_Pin, EXTI9_5_IRQn },
+    /* EN_CORE_ENCODER_2：A=PB5，B=PB4 */
     { PB5_E2A_GPIO_Port, PB5_E2A_Pin,
-      PB4_E2B_GPIO_Port, PB4_E2B_Pin,
-      { EXTI9_5_IRQn, EXTI4_IRQn }, 2U },
+      PB4_E2B_GPIO_Port, PB4_E2B_Pin, EXTI9_5_IRQn },
 };
-
-/**
- * 正交解码状态转移表（与已验证的电机测试工程一致）。
- * 状态=(A<<1)|B，下标=(上次状态<<2)|本次状态；
- * +1/-1为有效跳变，0为无变化或非法跳变(丢边沿)。
- */
-static const int8_t s_step_table[16] = {
-     0, -1,  1,  0,
-     1,  0,  0, -1,
-    -1,  0,  0,  1,
-     0,  1, -1,  0
-};
-
-/** 各编码器上次相位状态，ISR内更新。 */
-static uint8_t s_last_state[EN_CORE_ENCODER_NUM];
 
 /** 各编码器注册的步进回调（Adapter ISR入口）。 */
 static core_encoder_step_cb_t s_cb[EN_CORE_ENCODER_NUM];
@@ -66,46 +53,24 @@ static core_encoder_step_cb_t s_cb[EN_CORE_ENCODER_NUM];
 static volatile uint8_t s_started[EN_CORE_ENCODER_NUM];
 
 /**
- * @brief  读取一路编码器当前相位状态
- * @param  map 编码器映射项
- * @retval 相位状态，(A<<1)|B
- */
-static uint8_t encoder_read_state(const encoder_map_t *map)
-{
-    uint8_t phase_a; /* A相电平 */
-    uint8_t phase_b; /* B相电平 */
-
-    phase_a = (HAL_GPIO_ReadPin(map->port_a, map->pin_a)
-               == GPIO_PIN_SET) ? 1U : 0U;
-    phase_b = (HAL_GPIO_ReadPin(map->port_b, map->pin_b)
-               == GPIO_PIN_SET) ? 1U : 0U;
-    return (uint8_t)((phase_a << 1U) | phase_b);
-}
-
-/**
- * @brief  单编码器一次边沿事件的正交解码与上报
+ * @brief  单编码器A相上升沿事件：采样B相定方向并上报
  * @param  id 逻辑编码器实例
- * @note   ISR上下文；仅解码+回调，最短中断
+ * @note   ISR上下文；正交90度相位下A上升沿时B相电平即方向：
+ *         B低=+1，B高=-1（极性由板级配置在Adapter侧修正）
  */
-static void encoder_decode_isr(en_core_encoder_t id)
+static void encoder_step_isr(en_core_encoder_t id)
 {
-    uint8_t now_state; /* 本次相位状态 */
-    uint8_t table_idx; /* 转移表下标 */
-    int8_t  step;      /* 本次计数步进 */
+    const encoder_map_t *map = &s_enc_map[id]; /* 本路映射 */
+    int8_t               step;                 /* 本次计数步进 */
 
-    if (s_started[id] == 0U) {
+    if ((s_started[id] == 0U) || (s_cb[id] == NULL)) {
         return;
     }
 
-    now_state = encoder_read_state(&s_enc_map[id]);
-    table_idx = (uint8_t)((s_last_state[id] << 2U) | now_state);
-    step      = s_step_table[table_idx];
-
-    s_last_state[id] = now_state;
-
-    if ((step != 0) && (s_cb[id] != NULL)) {
-        s_cb[id](step);
-    }
+    /* 一条IDR读指令取B相电平，避免HAL读引脚开销 */
+    step = ((map->port_b->IDR & (uint32_t)map->pin_b) == 0U)
+         ? (int8_t)1 : (int8_t)-1;
+    s_cb[id](step);
 }
 
 platform_err_t core_encoder_reg_isr(en_core_encoder_t id,
@@ -126,23 +91,18 @@ platform_err_t core_encoder_reg_isr(en_core_encoder_t id,
 platform_err_t core_encoder_start(en_core_encoder_t id)
 {
     const encoder_map_t *map; /* 目标编码器映射 */
-    uint8_t              i;   /* 中断线游标 */
 
     if (id >= EN_CORE_ENCODER_NUM) {
         return PLATFORM_ERR_PARAM;
     }
     map = &s_enc_map[id];
 
-    /* 先锁存当前相位再放行上报，避免首个跳变被误判方向 */
-    s_last_state[id] = encoder_read_state(map);
+    /* 丢弃启动前挂起的边沿再放行上报 */
     __HAL_GPIO_EXTI_CLEAR_IT(map->pin_a);
-    __HAL_GPIO_EXTI_CLEAR_IT(map->pin_b);
     s_started[id] = 1U;
 
-    for (i = 0U; i < map->irqn_cnt; i++) {
-        HAL_NVIC_SetPriority(map->irqn[i], ENC_EXTI_NVIC_PRIO, 0U);
-        HAL_NVIC_EnableIRQ(map->irqn[i]);
-    }
+    HAL_NVIC_SetPriority(map->irqn, ENC_EXTI_NVIC_PRIO, 0U);
+    HAL_NVIC_EnableIRQ(map->irqn);
     return PLATFORM_ERR_OK;
 }
 
@@ -158,40 +118,21 @@ platform_err_t core_encoder_stop(en_core_encoder_t id)
 }
 
 /**
- * @brief  GPIO外部中断回调（HAL弱符号唯一实现）
- * @param  GPIO_Pin 触发的引脚掩码
- * @note   ISR上下文：按引脚路由到所属编码器解码；
- *         非编码器EXTI需求出现时在此扩展路由
- */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-    uint32_t i; /* 映射表游标 */
-
-    for (i = 0U; i < (uint32_t)EN_CORE_ENCODER_NUM; i++) {
-        if ((GPIO_Pin == s_enc_map[i].pin_a) ||
-            (GPIO_Pin == s_enc_map[i].pin_b)) {
-            encoder_decode_isr((en_core_encoder_t)i);
-            return;
-        }
-    }
-}
-
-/**
- * @brief  EXTI4中断服务函数（E2B=PB4）
- * @note   .ioc未勾选EXTI NVIC，本层持有强符号
- */
-void EXTI4_IRQHandler(void)
-{
-    HAL_GPIO_EXTI_IRQHandler(PB4_E2B_Pin);
-}
-
-/**
- * @brief  EXTI9_5中断服务函数（E2A=PB5,E1B=PB6,E1A=PB7）
- * @note   .ioc未勾选EXTI NVIC，本层持有强符号
+ * @brief  EXTI9_5中断服务函数（E1A=PB7，E2A=PB5）
+ * @note   .ioc未勾选EXTI NVIC，本层持有强符号；
+ *         直读直清PR且只动编码器线位，最短中断
  */
 void EXTI9_5_IRQHandler(void)
 {
-    HAL_GPIO_EXTI_IRQHandler(PB5_E2A_Pin);
-    HAL_GPIO_EXTI_IRQHandler(PB6_E1B_Pin);
-    HAL_GPIO_EXTI_IRQHandler(PB7_E1A_Pin);
+    uint32_t pending; /* 本层持有线的挂起位图 */
+
+    pending  = EXTI->PR & ENC_EXTI9_5_MASK;
+    EXTI->PR = pending; /* 写1清除，不影响其他线 */
+
+    if ((pending & (uint32_t)PB7_E1A_Pin) != 0U) {
+        encoder_step_isr(EN_CORE_ENCODER_1);
+    }
+    if ((pending & (uint32_t)PB5_E2A_Pin) != 0U) {
+        encoder_step_isr(EN_CORE_ENCODER_2);
+    }
 }

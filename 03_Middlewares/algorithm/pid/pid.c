@@ -8,14 +8,14 @@
 
 /**
  * @brief 实例化PID控制器对象
- *
+ * 
  * @param pid PID控制器对象
  * @param kp 比例系数
  * @param ki 积分系数
  * @param kd 微分系数
  * @param output_max 输出上限
  * @param output_min 输出下限
- *
+ * 
  * @return PID_OK
  * @return PID_ERROR
  * @return PID_ERRORPARAMETER
@@ -27,7 +27,7 @@ pid_status_t motor_pid_inst(
     float kd,
     float output_max,
     float output_min,
-    float integral_limit)
+    float integral_limit)    
 {
     pid_status_t ret = PID_OK;
 
@@ -35,14 +35,14 @@ pid_status_t motor_pid_inst(
     {
 #ifdef DEBUG
         DEBUG_OUT("PID_ERRORPARAMETER\r\n");
-#endif // DEBUG
+#endif // DEBUG         
         return PID_ERRORPARAMETER;
     }
 
     if(kp < 0.0f || ki < 0.0f || kd < 0.0f || integral_limit < 0.0f)
     {
 #ifdef DEBUG
-        DEBUG_OUT("PID_ERRORPARAMETER\r\n");
+        DEBUG_OUT("PID_ERRORPARAMETER\r\n");    
 #endif // DEBUG
         return PID_ERRORPARAMETER;
     }
@@ -78,13 +78,13 @@ pid_status_t motor_pid_inst(
 
 /**
  * @brief PID计算
- *
+ * 
  * @param pid PID控制器对象
  * @param target_speed 目标速度
  * @param feedback_speed 反馈速度
- *
+ * 
  * @return float PID输出值
- */
+ */    
 float motor_pid_calculate(
     motor_pid_t *const pid,
     float target_speed,
@@ -132,14 +132,25 @@ float motor_pid_calculate(
      * 5. 位置式PID计算
      *
      * output =
-     *     Kp × 当前误差
+     *     Kr × 目标速度
+     *   + Kp × 当前误差
      *   + Ki × 误差累计
      *   + Kd × 误差变化量
      */
-    pid->output =
-          pid->kp * pid->error
-        + pid->integral
-        + pid->kd * (pid->error - pid->last_error);
+    if(pid->target_speed>0){
+        pid->output =
+            (600.0f * pid->target_speed + 300.0f)
+            + pid->kp * pid->error
+            + pid->integral
+            + pid->kd * (pid->error - pid->last_error);
+    }
+    else if(pid->target_speed<0){
+        pid->output =
+            (677.23f * target_speed - 314.03f)
+            + pid->kp * pid->error
+            + pid->integral
+            + pid->kd * (pid->error - pid->last_error);
+    }
 
     /* 6. 输出限幅 */
     if (pid->output > pid->output_max)

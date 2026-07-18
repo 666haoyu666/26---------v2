@@ -1,8 +1,10 @@
 /**
  * @file    encoder_port.h
- * @brief   MCU正交编码器统一Port接口（EXTI双边沿4倍频解码）
+ * @brief   MCU编码器统一Port接口（A相上升沿1倍频解码）
  * @note    - 逻辑编码器到物理引脚/EXTI的映射只存在于同层encoder_port.c
- *          - 每个有效正交跳变经注册回调上报step=+1/-1，ISR上下文
+ *          - A相上升沿EXTI采样B相电平定方向：每个上升沿经注册回调
+ *            上报step=+1/-1，ISR上下文；高CPR电机（万级计数/转）
+ *            用1倍频把中断量压到4倍频的四分之一
  *          - EXTI的NVIC优先级由本层设置，必须与控制节拍定时器相同：
  *            两条ISR互不抢占，计数累加与读清零才无竞争
  */
@@ -15,12 +17,12 @@
 
 /** 逻辑编码器实例，值=encoder_port.c映射表下标。 */
 typedef enum {
-    EN_CORE_ENCODER_1 = 0, /* 编码器1：E1A=PB7,E1B=PB6 */
-    EN_CORE_ENCODER_2,     /* 编码器2：E2A=PB5,E2B=PB4 */
+    EN_CORE_ENCODER_1 = 0, /* 编码器1：A=PB7,B=PB6 */
+    EN_CORE_ENCODER_2,     /* 编码器2：A=PB5,B=PB4 */
     EN_CORE_ENCODER_NUM    /* 实例总数 */
 } en_core_encoder_t;
 
-/** 计数步进回调：每个有效正交跳变一次，ISR上下文，step=+1/-1。 */
+/** 计数步进回调：每个A相上升沿一次，ISR上下文，step=+1/-1。 */
 typedef void (*core_encoder_step_cb_t)(int8_t step);
 
 /**
@@ -35,7 +37,7 @@ platform_err_t core_encoder_reg_isr(en_core_encoder_t id,
                                     core_encoder_step_cb_t cb);
 
 /**
- * @brief  启动一路编码器：锁存当前相位并使能EXTI中断
+ * @brief  启动一路编码器：清除挂起边沿并使能EXTI中断
  * @param  id 逻辑编码器实例
  * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM
  */

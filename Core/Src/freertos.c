@@ -36,6 +36,8 @@
 #include "motor_ctrl_port.h"
 #include "imu_ctrl_port.h"
 #include "track_port.h"
+
+#include "math.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,6 +53,9 @@
                                 (float)BOARD_MOTOR_CPR)
 /* 循迹控制装配：每转行程随轮径实测同步更新 */
 #define CTRL_DEMO_MM_REV       (ODOM_DEMO_WHEEL_DIA_MM * 3.1415927f)
+
+#define ACC_DISTANCE           300
+#define ALL_DISTANCE           10000
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -171,7 +176,7 @@ void StartDefaultTask(void *argument)
   {
     Error_Handler();
   }
-	osDelay(2000);
+	osDelay(7000);
 
   server_odom_state_t odom_state = {0};
   server_odom_state_t last_odom_state = {0};
@@ -185,11 +190,11 @@ void StartDefaultTask(void *argument)
   platform_err_t log_st;
 #endif
 
-  if (PLATFORM_IS_ERR(track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR,
-                                          0.0f, 200)))
-  {
-    Error_Handler();
-  }
+  // if (PLATFORM_IS_ERR(track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR,
+  //                                         0.0f, 200)))
+  // {
+  //   Error_Handler();
+  // }
 
   for(;;)
   {
@@ -197,36 +202,45 @@ void StartDefaultTask(void *argument)
     if (PLATFORM_IS_OK(track_ctrl_trace_get(&trace)))
     {
       tx_drop = myprintf_get_drop();
+      // log_st = myprintf(
+      //     buf, sizeof(buf),
+      //     "%lu,%lu,%lu,%lu,%ld,%ld,%ld,%ld,%ld,"
+      //     "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,"
+      //     "%.2f,%.2f,%.2f,%.2f,%lu,%lu,%lu,%lu\r\n",
+      //     (unsigned long)trace.tick_ms,
+      //     (unsigned long)trace.cycle,
+      //     (unsigned long)trace.mode,
+      //     (unsigned long)trace.line_state,
+      //     (long)trace.port_st,
+      //     (long)trace.imu_st,
+      //     (long)trace.motor_st,
+      //     (long)trace.x_mm,
+      //     (long)trace.y_mm,
+      //     trace.yaw_deg,
+      //     trace.yaw_rate_deg_s,
+      //     trace.raw_err_mm,
+      //     trace.filt_err_mm,
+      //     trace.yaw_tgt_deg,
+      //     trace.yaw_err_deg,
+      //     trace.w_cmd_deg_s,
+      //     trace.v_cmd_mm_s,
+      //     trace.left_cmd_mm_s,
+      //     trace.right_cmd_mm_s,
+      //     trace.left_act_mm_s,
+      //     trace.right_act_mm_s,
+      //     (unsigned long)trace.left_fault,
+      //     (unsigned long)trace.right_fault,
+      //     (unsigned long)tx_drop,
+      //     (unsigned long)log_fail);
       log_st = myprintf(
-          buf, sizeof(buf),
-          "%lu,%lu,%lu,%lu,%ld,%ld,%ld,%ld,%ld,"
-          "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,"
-          "%.2f,%.2f,%.2f,%.2f,%lu,%lu,%lu,%lu\r\n",
+           buf, sizeof(buf),
+           "%lu,%lu,%.2f,%.2f,%.2f,%.2f\r\n",
           (unsigned long)trace.tick_ms,
           (unsigned long)trace.cycle,
-          (unsigned long)trace.mode,
-          (unsigned long)trace.line_state,
-          (long)trace.port_st,
-          (long)trace.imu_st,
-          (long)trace.motor_st,
-          (long)trace.x_mm,
-          (long)trace.y_mm,
-          trace.yaw_deg,
-          trace.yaw_rate_deg_s,
-          trace.raw_err_mm,
-          trace.filt_err_mm,
-          trace.yaw_tgt_deg,
-          trace.yaw_err_deg,
-          trace.w_cmd_deg_s,
-          trace.v_cmd_mm_s,
           trace.left_cmd_mm_s,
           trace.right_cmd_mm_s,
           trace.left_act_mm_s,
-          trace.right_act_mm_s,
-          (unsigned long)trace.left_fault,
-          (unsigned long)trace.right_fault,
-          (unsigned long)tx_drop,
-          (unsigned long)log_fail);
+          trace.right_act_mm_s);
       if (PLATFORM_IS_ERR(log_st))
       {
         log_fail++;
@@ -241,27 +255,80 @@ void StartDefaultTask(void *argument)
       continue;
     }
 
-    if(TRACK_PORT_NO_LINE   == track_state.state ||
-       TRACK_PORT_AMBIGUOUS == track_state.state ){
-      uint32_t distance;
-      distance =  (odom_state.x_mm - last_odom_state.x_mm) *
-                  (odom_state.x_mm - last_odom_state.x_mm) +
-                  (odom_state.y_mm - last_odom_state.y_mm) *
-                  (odom_state.y_mm - last_odom_state.y_mm);
-      if (360000 > distance)
-      {
-        osDelay(100);
-        continue;
-      }
+    // if(TRACK_PORT_NO_LINE   == track_state.state ||
+    //    TRACK_PORT_AMBIGUOUS == track_state.state ){
+    //   uint32_t distance;
+    //   distance =  (odom_state.x_mm - last_odom_state.x_mm) *
+    //               (odom_state.x_mm - last_odom_state.x_mm) +
+    //               (odom_state.y_mm - last_odom_state.y_mm) *
+    //               (odom_state.y_mm - last_odom_state.y_mm);
+    //   if (360000 > distance)
+    //   {
+    //     osDelay(100);
+    //     continue;
+    //   }
 
-      last_odom_state = odom_state;
-      target_yaw += 90.0f;
-      if (PLATFORM_IS_ERR(track_ctrl_set_mode(
-              TRACK_CTRL_MODE_TRACK_DIR, target_yaw, 200)))
-      {
-        Error_Handler();
-      }
+    //   last_odom_state = odom_state;
+    //   target_yaw += 90.0f;
+    //   if (PLATFORM_IS_ERR(track_ctrl_set_mode(
+    //           TRACK_CTRL_MODE_TRACK_DIR, target_yaw, 200)))
+    //   {
+    //     Error_Handler();
+    //   }
+    // }
+
+    /* 一整套动作流程 */
+    float distance;     /* 距离上次转弯点的距离 */
+    uint8_t ctrl_state; /* 现在的状态 ，0为匀加速阶段，
+                                       1为匀速阶段  ，
+                                       2为匀减速阶段，
+                                       3为转弯状态*/
+
+    //1.判断现处阶段
+    distance =  (odom_state.x_mm - last_odom_state.x_mm) *
+                (odom_state.x_mm - last_odom_state.x_mm) +
+                (odom_state.y_mm - last_odom_state.y_mm) *
+                (odom_state.y_mm - last_odom_state.y_mm) ; 
+    distance =  sqrt(distance);
+    if(ACC_DISTANCE > distance) ctrl_state = 0;
+    else if (ALL_DISTANCE - ACC_DISTANCE < distance) ctrl_state = 2;
+    else ctrl_state = 1;
+
+    if (ALL_DISTANCE          <=          distance &&
+        (TRACK_PORT_NO_LINE   == track_state.state ||
+        TRACK_PORT_AMBIGUOUS  == track_state.state ))
+    {
+      ctrl_state = 3;
     }
+
+    //2.对各个状态进行处理
+    static int32_t target_speed = 0;
+    if (0 == ctrl_state)
+    {
+      target_speed = (int32_t)(sqrt(distance * (4.0f/ACC_DISTANCE)) * 100)+20;
+      track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR ,target_yaw ,target_speed);
+    }else if (1 == ctrl_state)
+    {
+      track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR ,target_yaw ,200+20);
+    }else if (2 == ctrl_state)
+    {
+      target_speed = (int32_t)(sqrt((ALL_DISTANCE - distance) * (4.0f/ACC_DISTANCE)) * 100);
+      track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR ,target_yaw ,target_speed);
+    }else if (3 == ctrl_state)
+    {
+      // target_speed = 0;
+      // target_yaw += 90;
+      // last_odom_state = odom_state;
+      // track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR ,target_yaw ,0);
+      // osDelay(1000);
+      track_ctrl_set_mode(TRACK_CTRL_MODE_STOP,0,0);
+    }
+    
+    
+    
+    
+    
+    
 
     osDelay(100);
   }
