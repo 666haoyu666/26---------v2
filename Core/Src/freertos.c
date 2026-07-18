@@ -27,11 +27,9 @@
 /* USER CODE BEGIN Includes */
 #include "user_periph_setup.h"
 
+#include "app_tracking_task.h"
 #include "board_motor_config.h"
-#include "bsp_wrapper_motor.h"
-#include "myprintf.h"
 #include "service_diff_odom.h"
-#include "bsp_wrapper_imu.h"
 #include "service_track_ctrl.h"
 #include "motor_ctrl_port.h"
 #include "imu_ctrl_port.h"
@@ -47,6 +45,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+<<<<<<< HEAD
 /* Odom演示标定：轮径为占位值，实测后回填 */
 #define ODOM_DEMO_WHEEL_DIA_MM (65.0f)
 #define ODOM_DEMO_MM_TICK      (ODOM_DEMO_WHEEL_DIA_MM * 3.1415927f / \
@@ -56,6 +55,8 @@
 
 #define ACC_DISTANCE           300
 #define ALL_DISTANCE           10000
+=======
+>>>>>>> 2eaeec3f26139b9c8ccbe21271e11fff90074810
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -145,8 +146,8 @@ void StartDefaultTask(void *argument)
   server_odom_cfg_t odom_cfg;
   odom_cfg.left_id = BOARD_MOTOR_A_SLOT;
   odom_cfg.right_id = BOARD_MOTOR_B_SLOT;
-  odom_cfg.left_mm_tick = ODOM_DEMO_MM_TICK;
-  odom_cfg.right_mm_tick = ODOM_DEMO_MM_TICK;
+  odom_cfg.left_mm_tick = BOARD_MOTOR_MM_TICK;
+  odom_cfg.right_mm_tick = BOARD_MOTOR_MM_TICK;
   odom_cfg.left_sign = 1;
   odom_cfg.right_sign = 1;
   if (PLATFORM_IS_ERR(server_odom_init(&odom_cfg)))
@@ -158,8 +159,8 @@ void StartDefaultTask(void *argument)
   motor_ctrl_cfg_t ctrl_cfg;
   ctrl_cfg.left_id = BOARD_MOTOR_A_SLOT;
   ctrl_cfg.right_id = BOARD_MOTOR_B_SLOT;
-  ctrl_cfg.left_mm_rev = CTRL_DEMO_MM_REV;
-  ctrl_cfg.right_mm_rev = CTRL_DEMO_MM_REV;
+  ctrl_cfg.left_mm_rev = BOARD_MOTOR_MM_REV;
+  ctrl_cfg.right_mm_rev = BOARD_MOTOR_MM_REV;
   if (PLATFORM_IS_ERR(motor_ctrl_init(&ctrl_cfg)))
   {
     Error_Handler();
@@ -176,6 +177,7 @@ void StartDefaultTask(void *argument)
   {
     Error_Handler();
   }
+<<<<<<< HEAD
 	osDelay(7000);
 
   server_odom_state_t odom_state = {0};
@@ -331,6 +333,19 @@ void StartDefaultTask(void *argument)
     
 
     osDelay(100);
+=======
+
+  /* 上电静置2s后执行一次A左轮速度阶跃，完成后保持STOP。 */
+  osDelay(2000);
+  if (PLATFORM_IS_ERR(app_motor_tune_run()))
+  {
+    Error_Handler();
+  }
+
+  for(;;)
+  {
+    osDelay(1000);
+>>>>>>> 2eaeec3f26139b9c8ccbe21271e11fff90074810
   }
   /* USER CODE END StartDefaultTask */
 }

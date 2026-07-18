@@ -124,6 +124,20 @@ platform_err_t drv_adapter_motor_start(void)
     return group_apply(MOTOR_OP_START);
 }
 
+platform_err_t bsp_motor_start(uint32_t id)
+{
+    motor_drv_t *dev; /* 目标槽位设备表 */
+
+    if (id >= MOTOR_DRV_MAX_NUM) {
+        return PLATFORM_ERR_PARAM;
+    }
+    dev = slot_get(id);
+    if (dev == NULL) {
+        return PLATFORM_ERR_NOT_INITIALIZED;
+    }
+    return dev->pf_start(dev);
+}
+
 platform_err_t drv_adapter_motor_stop(void)
 {
     return group_apply(MOTOR_OP_STOP);

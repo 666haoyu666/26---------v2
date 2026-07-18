@@ -89,6 +89,15 @@ platform_err_t drv_adapter_motor_deinit(void);
 platform_err_t drv_adapter_motor_start(void);
 
 /**
+ * @brief  使能指定物理槽位的单个电机
+ * @param  id 稳定物理槽位
+ * @retval PLATFORM_ERR_OK / PLATFORM_ERR_PARAM /
+ *         PLATFORM_ERR_NOT_INITIALIZED / 底层错误
+ * @note   用于单电机标定；不改变其他槽位的运行状态
+ */
+platform_err_t bsp_motor_start(uint32_t id);
+
+/**
  * @brief  失能全部已注册电机并滑行，保留累计位置，进入OFF态
  * @retval PLATFORM_ERR_OK / PLATFORM_ERR_NOT_INITIALIZED /
  *         底层首个错误

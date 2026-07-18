@@ -298,9 +298,20 @@ static void server_track_ctrl_task(void *argument)
             continue;
         }
 
-        /* 离开STOP先使能电机闭环，失败不推进模式下周期重试 */
-        if (mode_now != (uint8_t)TRACK_CTRL_MODE_STOP &&
-            mode_prev == (uint8_t)TRACK_CTRL_MODE_STOP) {
+        /* A轮标定只启动左轮；切回底盘模式时再使能双轮。 */
+        if (mode_now != mode_prev &&
+            mode_now == (uint8_t)TRACK_CTRL_MODE_MOTOR_A) {
+            motor_ctrl_stop();
+            err = motor_left_start();
+            if (PLATFORM_IS_ERR(err)) {
+                track_wait_period(&last_wake);
+                continue;
+            }
+        } else if (mode_now != (uint8_t)TRACK_CTRL_MODE_STOP &&
+                   mode_now != (uint8_t)TRACK_CTRL_MODE_MOTOR_A &&
+                   (mode_prev == (uint8_t)TRACK_CTRL_MODE_STOP ||
+                    mode_prev == (uint8_t)TRACK_CTRL_MODE_MOTOR_A)) {
+            motor_ctrl_stop();
             err = motor_ctrl_start();
             if (PLATFORM_IS_ERR(err)) {
                 track_wait_period(&last_wake);
@@ -308,12 +319,24 @@ static void server_track_ctrl_task(void *argument)
             }
         }
 
-        track_err_now = track_err_get(&line_data, &port_st);
+        if (mode_now == (uint8_t)TRACK_CTRL_MODE_MOTOR_A) {
+            /* 单轮标定不采集循迹与航向，避免无关链路干扰内环。 */
+            line_data = (track_port_result_t){0};
+            line_data.state = TRACK_PORT_NO_LINE;
+            imu_data = (imu_ctrl_data_t){0};
+            track_err_now = 0.0f;
+            port_st = PLATFORM_ERR_OK;
 #if TRACK_TRACE_EN
-        imu_st = imu_ctrl_get_data(&imu_data);
+            imu_st = PLATFORM_ERR_OK;
+        } else {
+            track_err_now = track_err_get(&line_data, &port_st);
+            imu_st = imu_ctrl_get_data(&imu_data);
 #else
-        (void)imu_ctrl_get_data(&imu_data);
+        } else {
+            track_err_now = track_err_get(&line_data, &port_st);
+            (void)imu_ctrl_get_data(&imu_data);
 #endif
+        }
         yaw_now_deg = imu_data.yaw_deg;
         yaw_err_deg = 0.0f;
         target_w = 0.0f;
@@ -356,6 +379,15 @@ static void server_track_ctrl_task(void *argument)
                 track_apply_motion(v_cmd_mm_s, target_w,
                                    &left_cmd, &right_cmd);
                 break;
+            case TRACK_CTRL_MODE_MOTOR_A:
+                /* A左轮速度内环标定：右轮保持OFF且目标不变。 */
+                v_cmd_mm_s = v_tgt_mm_s;
+                left_cmd = v_tgt_mm_s;
+                err = motor_left_set(left_cmd);
+                if (PLATFORM_IS_ERR(err)) {
+                    motor_ctrl_stop();
+                }
+                break;
             default:
                 break;
         }
@@ -385,6 +417,8 @@ static void server_track_ctrl_task(void *argument)
         trace.right_cmd_mm_s = right_cmd;
         trace.left_act_mm_s = mot_data.left_act_mm_s;
         trace.right_act_mm_s = mot_data.right_act_mm_s;
+        trace.left_duty = mot_data.left_duty;
+        trace.right_duty = mot_data.right_duty;
         trace.left_fault = mot_data.left_fault;
         trace.right_fault = mot_data.right_fault;
         track_trace_pub(&trace);
@@ -484,7 +518,8 @@ platform_err_t track_ctrl_set_mode(track_ctrl_mode_t mode,
     if (mode != TRACK_CTRL_MODE_STOP &&
         mode != TRACK_CTRL_MODE_TRACK_DIR &&
         mode != TRACK_CTRL_MODE_TRACK &&
-        mode != TRACK_CTRL_MODE_TURN) {
+        mode != TRACK_CTRL_MODE_TURN &&
+        mode != TRACK_CTRL_MODE_MOTOR_A) {
         return PLATFORM_ERR_PARAM;
     }
     if (mode == TRACK_CTRL_MODE_STOP && speed_mm_s != 0) {
