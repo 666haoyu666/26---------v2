@@ -10,6 +10,7 @@
 #include "bsp_adapter_port_imu.h"
 #include "bsp_adapter_port_line_sensor.h"
 #include "bsp_adapter_port_motor.h"
+#include "bsp_wrapper_motor.h"
 
 platform_err_t app_periph_init(void)
 {
@@ -37,11 +38,11 @@ platform_err_t app_periph_init(void)
 
     /* 电机（A左/B右两轮）：注册设备表并初始化， */
     /* 初始化后处OFF态不出力，起转由上层start触发 */
-    err = drv_adapter_motor_register();
+    err = motor_adp_register();
     if (PLATFORM_IS_ERR(err)) {
         return err;
     }
-    err = drv_adapter_motor_init();
+    err = bsp_motor_init_all();
     if (PLATFORM_IS_ERR(err)) {
         return err;
     }

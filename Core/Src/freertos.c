@@ -34,6 +34,7 @@
 #include "motor_ctrl_port.h"
 #include "imu_ctrl_port.h"
 #include "track_port.h"
+#include "myprintf.h"
 
 #include "math.h"
 /* USER CODE END Includes */
@@ -45,18 +46,12 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-<<<<<<< HEAD
-/* Odom演示标定：轮径为占位值，实测后回填 */
-#define ODOM_DEMO_WHEEL_DIA_MM (65.0f)
-#define ODOM_DEMO_MM_TICK      (ODOM_DEMO_WHEEL_DIA_MM * 3.1415927f / \
-                                (float)BOARD_MOTOR_CPR)
-/* 循迹控制装配：每转行程随轮径实测同步更新 */
-#define CTRL_DEMO_MM_REV       (ODOM_DEMO_WHEEL_DIA_MM * 3.1415927f)
+/* Odom装配换算：每tick行程 = 每转行程/每转计数，随board配置更新 */
+#define ODOM_A_MM_TICK (CFG_MOTOR_A_MM_REV / (float)CFG_MOTOR_A_CPR)
+#define ODOM_B_MM_TICK (CFG_MOTOR_B_MM_REV / (float)CFG_MOTOR_B_CPR)
 
 #define ACC_DISTANCE           300
-#define ALL_DISTANCE           10000
-=======
->>>>>>> 2eaeec3f26139b9c8ccbe21271e11fff90074810
+#define ALL_DISTANCE           890
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -144,10 +139,10 @@ void StartDefaultTask(void *argument)
 
   /* 里程计装配：槽位对齐board_motor_config，标定值待实测回填 */
   server_odom_cfg_t odom_cfg;
-  odom_cfg.left_id = BOARD_MOTOR_A_SLOT;
-  odom_cfg.right_id = BOARD_MOTOR_B_SLOT;
-  odom_cfg.left_mm_tick = BOARD_MOTOR_MM_TICK;
-  odom_cfg.right_mm_tick = BOARD_MOTOR_MM_TICK;
+  odom_cfg.left_id = CFG_MOTOR_A_SLOT;
+  odom_cfg.right_id = CFG_MOTOR_B_SLOT;
+  odom_cfg.left_mm_tick = ODOM_A_MM_TICK;
+  odom_cfg.right_mm_tick = ODOM_B_MM_TICK;
   odom_cfg.left_sign = 1;
   odom_cfg.right_sign = 1;
   if (PLATFORM_IS_ERR(server_odom_init(&odom_cfg)))
@@ -157,10 +152,10 @@ void StartDefaultTask(void *argument)
 
   /* 循迹控制装配：Port先行、服务最后；左右槽位与odom一致 */
   motor_ctrl_cfg_t ctrl_cfg;
-  ctrl_cfg.left_id = BOARD_MOTOR_A_SLOT;
-  ctrl_cfg.right_id = BOARD_MOTOR_B_SLOT;
-  ctrl_cfg.left_mm_rev = BOARD_MOTOR_MM_REV;
-  ctrl_cfg.right_mm_rev = BOARD_MOTOR_MM_REV;
+  ctrl_cfg.left_id = CFG_MOTOR_A_SLOT;
+  ctrl_cfg.right_id = CFG_MOTOR_B_SLOT;
+  ctrl_cfg.left_mm_rev = CFG_MOTOR_A_MM_REV;
+  ctrl_cfg.right_mm_rev = CFG_MOTOR_B_MM_REV;
   if (PLATFORM_IS_ERR(motor_ctrl_init(&ctrl_cfg)))
   {
     Error_Handler();
@@ -177,13 +172,12 @@ void StartDefaultTask(void *argument)
   {
     Error_Handler();
   }
-<<<<<<< HEAD
-	osDelay(7000);
+	osDelay(2000);
 
   server_odom_state_t odom_state = {0};
   server_odom_state_t last_odom_state = {0};
   track_port_result_t track_state = {0};
-  float target_yaw = 0.0f;
+volatile  float target_yaw = 0.0f;
 #if TRACK_TRACE_EN
   static char buf[256];
   static track_trace_t trace;
@@ -192,11 +186,16 @@ void StartDefaultTask(void *argument)
   platform_err_t log_st;
 #endif
 
-  // if (PLATFORM_IS_ERR(track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR,
-  //                                         0.0f, 200)))
-  // {
-  //   Error_Handler();
-  // }
+//  if (PLATFORM_IS_ERR(track_ctrl_set_mode(TRACK_CTRL_MODE_TURN,
+//                                          90.0f, 200)))
+//  {
+//    Error_Handler();
+//  }
+//  while (1)
+//  {
+//    /* code */
+//  }
+//  
 
   for(;;)
   {
@@ -318,12 +317,14 @@ void StartDefaultTask(void *argument)
       track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR ,target_yaw ,target_speed);
     }else if (3 == ctrl_state)
     {
-      // target_speed = 0;
-      // target_yaw += 90;
-      // last_odom_state = odom_state;
-      // track_ctrl_set_mode(TRACK_CTRL_MODE_TRACK_DIR ,target_yaw ,0);
-      // osDelay(1000);
-      track_ctrl_set_mode(TRACK_CTRL_MODE_STOP,0,0);
+			osDelay(1000);
+      target_speed = 0;
+      target_yaw += 90;
+      last_odom_state = odom_state;
+      track_ctrl_set_mode(TRACK_CTRL_MODE_TURN ,target_yaw ,100);
+      osDelay(4000);
+
+      // track_ctrl_set_mode(TRACK_CTRL_MODE_STOP,0,0);
     }
     
     
@@ -333,19 +334,8 @@ void StartDefaultTask(void *argument)
     
 
     osDelay(100);
-=======
 
-  /* 上电静置2s后执行一次A左轮速度阶跃，完成后保持STOP。 */
-  osDelay(2000);
-  if (PLATFORM_IS_ERR(app_motor_tune_run()))
-  {
-    Error_Handler();
-  }
 
-  for(;;)
-  {
-    osDelay(1000);
->>>>>>> 2eaeec3f26139b9c8ccbe21271e11fff90074810
   }
   /* USER CODE END StartDefaultTask */
 }

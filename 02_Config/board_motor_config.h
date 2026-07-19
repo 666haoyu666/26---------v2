@@ -1,64 +1,55 @@
 /**
  * @file    board_motor_config.h
- * @brief   电机（A左/B右两轮）板级映射与默认参数
- * @note    - 定义必须严格来源于00_Docs/01_资源分配表
- *          - IO下标与io_port.c单路表对齐，PWM/编码器/定时器
- *            实例与各core port映射表对齐
- *          - 方向约定：IN1高+IN2低=顺时针；A顺时针=前进(左轮)，
- *            B逆时针=前进(右轮)，相对车头方向
- *          - 编码器A/B相极性与PID参数为测试工程沿用值，实测后回填
+ * @brief   双路编码器电机板级映射与闭环默认参数
+ * @note    CPR按TIM3/TIM4实际计数填写，不等同于编码器铭牌脉冲数。
  */
 
 #ifndef BOARD_MOTOR_CONFIG_H
 #define BOARD_MOTOR_CONFIG_H
 
-/* ---------------- 公共参数 ---------------- */
+#define CFG_MOTOR_COUNT       (2U)     /* 电机数量 */
+#define CFG_MOTOR_TICK_S      (0.010f) /* TIM9控制周期，s */
+#define CFG_MOTOR_CPR         (20407U) /* 每输出轴转TIM计数，需实测 */
+#define CFG_MOTOR_MAX_RPS     (50.0f)  /* 串口目标转速限幅 */
 
-#define BOARD_MOTOR_TICK_TIMER (EN_CORE_TIMER_CTRL_10MS) /* 控制节拍 */
-#define BOARD_MOTOR_TICK_S     (0.010f)  /* 节拍周期s，与TIM9一致 */
-<<<<<<< HEAD
-#define BOARD_MOTOR_CPR        (10226U) /* 输出轴每圈计数， */
-                                        /* A相上升沿1倍频(=40904/4) */
-=======
-#define BOARD_MOTOR_CPR        (1061U)   /* 输出轴每圈计数(4倍频) */
-#define BOARD_MOTOR_DIA_MM     (65.0f)   /* 轮径mm，待实测回填 */
-#define BOARD_MOTOR_MM_REV     \
-    (BOARD_MOTOR_DIA_MM * 3.1415927f) /* 每转行程，mm/rev */
-#define BOARD_MOTOR_MM_TICK    \
-    (BOARD_MOTOR_MM_REV / (float)BOARD_MOTOR_CPR) /* 每tick行程 */
->>>>>>> 2eaeec3f26139b9c8ccbe21271e11fff90074810
+#define CFG_MOTOR_TICK_ID     (CORE_TIMER_CTRL_10MS) /* TIM9 */
 
-/* PWM满幅不在此配置：Adapter初始化时经core_pwm_get_max() *
-/* 运行期读取定时器ARR，跟随CubeMX配置自动适应 */
+#define CFG_MOTOR_A_SLOT      (0U)               /* A左轮槽位 */
+#define CFG_MOTOR_A_PWM       (CORE_PWM_MOTOR_A) /* TIM1_CH2 */
+#define CFG_MOTOR_A_IN1       (0U) /* io_port下标: PB12 AIN1 */
+#define CFG_MOTOR_A_IN2       (1U) /* io_port下标: PB13 AIN2 */
+#define CFG_MOTOR_A_ENC       (CORE_ENC_MOTOR_A) /* TIM4 */
+#define CFG_MOTOR_A_CPR       (CFG_MOTOR_CPR)    /* A轮每转计数 */
+#define CFG_MOTOR_A_DIA_MM    (65.0f)             /* A轮直径mm */
+#define CFG_MOTOR_A_MM_REV    \
+    (CFG_MOTOR_A_DIA_MM * 3.1415927f)             /* A轮每转行程 */
+#define CFG_MOTOR_A_FILTER    (0.30f)              /* A轮滤波系数 */
+#define CFG_MOTOR_A_PID_KP    (199.8f)               /* A轮比例增益 */
+#define CFG_MOTOR_A_PID_KI    (50.0f)               /* A轮积分增益 */
+#define CFG_MOTOR_A_PID_KD    (0.0f)               /* A轮微分增益 */
+#define CFG_MOTOR_A_PID_KFF   (750.0f)               /* A轮前馈斜率 */
+#define CFG_MOTOR_A_PID_FF_BIAS (265.0f)             /* A轮静摩擦补偿 */
+#define CFG_MOTOR_A_PID_I_LIMIT (100.0f)          /* A轮积分限幅 */
+#define CFG_MOTOR_A_FWD_CW    (1U)               /* 正转为顺时针 */
+#define CFG_MOTOR_A_ENC_SIGN  (1)                /* 编码器方向修正 */
 
-<<<<<<< HEAD
-#define BOARD_MOTOR_PID_KP     (0.0f)  /* 速度环比例，待实测回填 */
-#define BOARD_MOTOR_PID_KI     (0.0f)   /* 速度环积分，待实测回填 */
-=======
-#define BOARD_MOTOR_PID_KP     (350.0f)  /* 首轮单电机Kp扫描起点 */
-#define BOARD_MOTOR_PID_KI     (45.0f)    /* 首轮扫描关闭积分 */
->>>>>>> 2eaeec3f26139b9c8ccbe21271e11fff90074810
-#define BOARD_MOTOR_PID_KD     (0.0f)    /* 速度环微分，待实测回填 */
-#define BOARD_MOTOR_PID_ILIMIT (1000.0f) /* 积分限幅，待实测回填 */
-
-/* ---------------- A电机（左轮） ---------------- */
-
-#define BOARD_MOTOR_A_SLOT         (0U) /* Wrapper物理槽位 */
-#define BOARD_MOTOR_A_PWM          (EN_CORE_PWM_MOTOR_A) /* PA9 */
-#define BOARD_MOTOR_A_IO_IN1       (0U) /* io_port下标: PB12 AIN1 */
-#define BOARD_MOTOR_A_IO_IN2       (1U) /* io_port下标: PB13 AIN2 */
-#define BOARD_MOTOR_A_ENCODER      (EN_CORE_ENCODER_1) /* PB7/PB6 */
-#define BOARD_MOTOR_A_FWD_CW       (1U) /* 1=正输出为顺时针(前进) */
-#define BOARD_MOTOR_A_ENC_REVERSED (1U) /* 1=计数反相，待实测回填 */
-
-/* ---------------- B电机（右轮） ---------------- */
-
-#define BOARD_MOTOR_B_SLOT         (1U) /* Wrapper物理槽位 */
-#define BOARD_MOTOR_B_PWM          (EN_CORE_PWM_MOTOR_B) /* PA8 */
-#define BOARD_MOTOR_B_IO_IN1       (2U) /* io_port下标: PB14 BIN1 */
-#define BOARD_MOTOR_B_IO_IN2       (3U) /* io_port下标: PB15 BIN2 */
-#define BOARD_MOTOR_B_ENCODER      (EN_CORE_ENCODER_2) /* PB5/PB4 */
-#define BOARD_MOTOR_B_FWD_CW       (1U) /* 1=正输出为顺时针(前进) */
-#define BOARD_MOTOR_B_ENC_REVERSED (0U) /* 1=计数反相，待实测回填 */
+#define CFG_MOTOR_B_SLOT      (1U)               /* B右轮槽位 */
+#define CFG_MOTOR_B_PWM       (CORE_PWM_MOTOR_B) /* TIM1_CH1 */
+#define CFG_MOTOR_B_IN1       (2U) /* io_port下标: PB14 BIN1 */
+#define CFG_MOTOR_B_IN2       (3U) /* io_port下标: PB15 BIN2 */
+#define CFG_MOTOR_B_ENC       (CORE_ENC_MOTOR_B) /* TIM3 */
+#define CFG_MOTOR_B_CPR       (CFG_MOTOR_CPR)    /* B轮每转计数 */
+#define CFG_MOTOR_B_DIA_MM    (65.0f)             /* B轮直径mm */
+#define CFG_MOTOR_B_MM_REV    \
+    (CFG_MOTOR_B_DIA_MM * 3.1415927f)             /* B轮每转行程 */
+#define CFG_MOTOR_B_FILTER    (0.30f)              /* B轮滤波系数 */
+#define CFG_MOTOR_B_PID_KP    (200.0f)               /* B轮比例增益 */
+#define CFG_MOTOR_B_PID_KI    (50.0f)               /* B轮积分增益 */
+#define CFG_MOTOR_B_PID_KD    (0.0f)               /* B轮微分增益 */
+#define CFG_MOTOR_B_PID_KFF   (720.0f)               /* B轮前馈斜率 */
+#define CFG_MOTOR_B_PID_FF_BIAS (370.0f)             /* B轮静摩擦补偿 */
+#define CFG_MOTOR_B_PID_I_LIMIT (100.0f)          /* B轮积分限幅 */
+#define CFG_MOTOR_B_FWD_CW    (1U)               /* 整车前进为顺时针 */
+#define CFG_MOTOR_B_ENC_SIGN  (-1)                /* 换向后反馈保持为正 */
 
 #endif /* BOARD_MOTOR_CONFIG_H */

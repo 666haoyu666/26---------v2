@@ -1,173 +1,90 @@
 /**
  * @file    bsp_motor_driver.h
- * @brief   编码器电机对象实现
- * @author  bojing
+ * @brief   编码器直流电机闭环Driver
+ * @note    不依赖HAL/RTOS；硬件输出和编码器计数由Adapter注入。
  */
 
 #ifndef BSP_MOTOR_DRIVER_H
 #define BSP_MOTOR_DRIVER_H
 
-#include <stdio.h>
 #include <stdint.h>
 
-#include "encoder_motor.h"
 #include "pid.h"
 
-//#define DEBUG
-#define DEBUG_OUT(X) printf(X)
-
-/* 电机操作状态 */
-typedef enum
-{
-    MOTOR_OK             = 0,      /* 操作成功 */
-    MOTOR_ERROR          = 1,      /* 通用运行错误 */
-    MOTOR_ERRORTIMEOUT   = 2,      /* 操作超时 */
-    MOTOR_ERRORRESOURCE  = 3,      /* 所需资源不可用 */
-    MOTOR_ERRORPARAMETER = 4,      /* 参数错误 */
-    MOTOR_ERRORNOMEMORY  = 5,      /* 内存分配失败 */
-    MOTOR_ERRORISR       = 6,      /* 不允许在中断服务函数中执行 */
-    MOTOR_RESERVED       = 0xFF,   /* 保留状态 */
+typedef enum {
+    MOTOR_OK = 0,
+    MOTOR_ERR_PARAM,
+    MOTOR_ERR_STATE,
+    MOTOR_ERR_HW
 } motor_status_t;
 
-/* 电机默认旋转方向 */
-typedef enum
-{
-    MOTOR_DIR_CW  = 0,       /* 顺时针旋转 */
-    MOTOR_DIR_CCW = 1,       /* 逆时针旋转 */
+typedef enum {
+    MOTOR_DIR_CW = 0,
+    MOTOR_DIR_CCW
 } motor_dir_t;
 
-/* 电机使能接口 */
-typedef motor_status_t (*bsp_motor_set_enable_t)(uint8_t enable);
+typedef motor_status_t (*motor_output_t)(void *ctx,
+                                         motor_dir_t dir,
+                                         uint16_t pwm);
 
-/* 电机PWM设置接口 */
-typedef motor_status_t (*bsp_motor_set_output_t)(
-    motor_dir_t dir,
-    uint16_t pwm);
+typedef struct {
+    void            *ctx;       /* Adapter硬件上下文 */
+    motor_output_t  pf_output;  /* 方向与PWM输出接口 */
+} motor_hw_if_t;
 
+typedef struct {
+    motor_dir_t      fwd_dir;    /* 逻辑正向对应物理方向 */
+    int8_t           enc_sign;   /* 编码器方向修正，+1/-1 */
+    uint16_t         pwm_max;    /* PWM满幅 */
+    uint32_t         enc_cpr;    /* 输出轴每转计数 */
+    float            sample_s;   /* 控制周期，s */
+    float            filter;     /* 速度滤波系数，0到1 */
+    motor_pid_cfg_t  pid_cfg;    /* 默认闭环参数 */
+} motor_core_cfg_t;
 
+typedef struct {
+    float    target_rps; /* 目标输出轴转速 */
+    float    speed_rps;  /* 滤波后输出轴转速 */
+    float    raw_rps;    /* 本拍原始转速 */
+    float    p_term;     /* 当前比例输出项 */
+    float    i_term;     /* 当前积分输出项 */
+    float    ff_term;    /* 当前前馈输出项 */
+    int64_t  position;   /* 累计编码器计数 */
+    int32_t  duty;       /* 已应用带符号PWM */
+    uint8_t  enabled;    /* 闭环使能标记 */
+} motor_core_state_t;
 
-/* 电机驱动对象 */
-typedef struct motor_driver
-{
-    /* 对象状态 */
-    uint8_t is_inited;             /* 是否已实例化 */
-    uint8_t is_enabled;            /* 是否已使能 */
+typedef struct {
+    const motor_hw_if_t  *hw;         /* 注入硬件接口 */
+    motor_core_cfg_t     cfg;         /* 固定配置 */
+    motor_pid_t          pid;         /* PID控制器 */
+    float                target_rps;  /* 当前目标转速 */
+    float                speed_rps;   /* 滤波速度 */
+    float                raw_rps;     /* 原始速度 */
+    int64_t              position;    /* 累计位置计数 */
+    int32_t              duty;        /* 已应用带符号PWM */
+    uint16_t             last_ticks;  /* 上拍定时器计数 */
+    uint8_t              inited;      /* 初始化标记 */
+    uint8_t              enabled;     /* 闭环使能标记 */
+    uint8_t              first_tick;  /* 首拍基准标记 */
+    uint8_t              speed_ready; /* 滤波基准标记 */
+} motor_core_t;
 
-    /* 电机输出配置 */
-    uint16_t pwm_max;              /* 最大PWM输出值 */
-    motor_dir_t dir;               /* 正输出对应的默认方向 */
-
-    /*电机运行状态  */
-    int16_t output;                 /* 当前输出值，正数表示正转，负数表示反转 */
-    float target_speed_rps;         /* 目标转速，单位：转/秒 */
-
-    /* 底层操作接口 */
-    bsp_motor_set_enable_t pf_set_enable; /* 电机使能接口 */
-    bsp_motor_set_output_t pf_set_output; /* 电机PWM设置接口 */
-
-    /* 电机控制对象 */
-    encoder_t encoder;             /* 编码器对象 */
-    motor_pid_t pid;               /* PID控制器对象 */
-
-} motor_driver_t;
-
-/**
- * @brief  实例化单电机对象
- *
- * @param  motor         电机对象指针
- * @param  pf_set_enable 底层电机使能接口
- * @param  pf_set_output 底层PWM输出接口
- * @param  dir           电机默认旋转方向
- * @param  pwm_max       最大PWM值
- * @retval MOTOR_OK             实例化成功
- * @retval MOTOR_ERRORPARAMETER 参数错误
- */
-motor_status_t motor_driver_inst(
-    motor_driver_t *const motor,
-    bsp_motor_set_enable_t pf_set_enable,
-    bsp_motor_set_output_t pf_set_output,
-    motor_dir_t dir,
-    uint16_t pwm_max);
-
-/**
- * @brief  使能或失能单电机对象
- *
- * @param  motor         电机对象指针
- * @param  enable        1：使能，0：失能
- *
- * @retval MOTOR_OK             操作成功
- * @retval MOTOR_ERROR          底层接口执行失败
- * @retval MOTOR_ERRORPARAMETER 参数错误
- */
-motor_status_t motor_driver_enable(
-    motor_driver_t *const motor,
-    uint8_t enable);
-
-/**
- * @brief  设置电机输出方向和PWM
- *
- * @param  motor         电机对象指针
- * @param  output        0>正转，<0反转
- *
- * @retval MOTOR_OK             操作成功
- * @retval MOTOR_ERROR          底层接口执行失败
- * @retval MOTOR_ERRORPARAMETER 参数错误
- */
-motor_status_t motor_driver_set_output(
-    motor_driver_t *const motor,
-    int16_t output);
-
-
-/**
- * @brief 设置目标速度
- *
- * @param motor             电机对象
- * @param target_speed_rps  目标输出轴速度，单位：转/秒
- *
- * target_speed_rps > 0：逻辑正向
- * target_speed_rps < 0：逻辑反向
- * target_speed_rps = 0：目标停止
- */
-motor_status_t motor_driver_set_target_speed(
-    motor_driver_t *const motor,
-    float target_speed_rps);
-
-/**
- * @brief  周期更新编码器速度和位置
- *
- * @param  motor 电机对象指针
- *
- * @retval MOTOR_OK             操作成功
- * @retval MOTOR_ERROR          底层接口执行失败
- * @retval MOTOR_ERRORPARAMETER 参数错误
- */
-motor_status_t motor_driver_encoder_update(
-    motor_driver_t *const motor);
-
-
-/**
- * @brief  PID计算，更新电机输出PWM
- *
- * @param  motor 电机对象指针
- *
- * @retval MOTOR_OK             操作成功
- * @retval MOTOR_ERROR          底层接口执行失败
- * @retval MOTOR_ERRORPARAMETER 参数错误
- */
-motor_status_t motor_driver_pid_update(
-    motor_driver_t *const motor);
-
-
-/**
- * @brief  停止电机
- *
- * @param  motor      电机对象指针
- *
- * @retval MOTOR_OK             操作成功
- * @retval MOTOR_ERROR          底层接口执行失败
- * @retval MOTOR_ERRORPARAMETER 参数错误
- */
-motor_status_t motor_driver_stop(
-    motor_driver_t *const motor);
+motor_status_t motor_core_init(motor_core_t *motor,
+                               const motor_hw_if_t *hw,
+                               const motor_core_cfg_t *cfg);
+motor_status_t motor_core_start(motor_core_t *motor);
+motor_status_t motor_core_stop(motor_core_t *motor);
+motor_status_t motor_core_set_rps(motor_core_t *motor, float rps);
+motor_status_t motor_core_set_pid(motor_core_t *motor,
+                                  const motor_pid_cfg_t *cfg);
+motor_status_t motor_core_get_pid(const motor_core_t *motor,
+                                  motor_pid_cfg_t *cfg);
+motor_status_t motor_core_set_filt(motor_core_t *motor, float filter);
+motor_status_t motor_core_get_filt(const motor_core_t *motor,
+                                   float *filter);
+motor_status_t motor_core_update(motor_core_t *motor, uint16_t ticks);
+motor_status_t motor_core_get_state(const motor_core_t *motor,
+                                    motor_core_state_t *state);
 
 #endif /* BSP_MOTOR_DRIVER_H */

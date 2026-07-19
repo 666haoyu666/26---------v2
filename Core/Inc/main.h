@@ -99,8 +99,8 @@ void Error_Handler(void);
 #define PB4_E2B_GPIO_Port GPIOB
 #define PB5_E2A_Pin GPIO_PIN_5
 #define PB5_E2A_GPIO_Port GPIOB
-#define PB6_E2B_Pin GPIO_PIN_6
-#define PB6_E2B_GPIO_Port GPIOB
+#define PB6_E1B_Pin GPIO_PIN_6
+#define PB6_E1B_GPIO_Port GPIOB
 #define PB7_E1A_Pin GPIO_PIN_7
 #define PB7_E1A_GPIO_Port GPIOB
 #define PB8_I2C1_SCL_Pin GPIO_PIN_8

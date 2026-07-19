@@ -14,14 +14,14 @@ static uint8_t          g_port_bound; /* 1=槽位绑定有效 */
 
 platform_err_t motor_port_init(const motor_port_cfg_t *cfg)
 {
-    motor_drv_state_t state; /* 探测读取的电机状态 */
+    bsp_motor_state_t state; /* 探测读取的电机状态 */
     platform_err_t err;      /* 底层读取结果 */
 
     if (cfg == NULL) {
         return PLATFORM_ERR_PARAM;
     }
-    if (cfg->left_id >= MOTOR_DRV_MAX_NUM ||
-        cfg->right_id >= MOTOR_DRV_MAX_NUM ||
+    if (cfg->left_id >= MOTOR_SLOT_COUNT ||
+        cfg->right_id >= MOTOR_SLOT_COUNT ||
         cfg->left_id == cfg->right_id) {
         return PLATFORM_ERR_PARAM;
     }
@@ -30,9 +30,9 @@ platform_err_t motor_port_init(const motor_port_cfg_t *cfg)
     }
 
     /* 探测两槽位，未注册/未初始化在装配期即暴露 */
-    err = drv_adapter_motor_get_state(cfg->left_id, &state);
+    err = bsp_motor_get_state(cfg->left_id, &state);
     if (PLATFORM_IS_OK(err)) {
-        err = drv_adapter_motor_get_state(cfg->right_id, &state);
+        err = bsp_motor_get_state(cfg->right_id, &state);
     }
     if (PLATFORM_IS_ERR(err)) {
         return err;
@@ -57,8 +57,8 @@ platform_err_t motor_port_deinit(void)
 platform_err_t motor_port_get_ticks(int64_t *left_tick,
                                     int64_t *right_tick)
 {
-    motor_drv_state_t left_st;  /* 左轮同拍状态快照 */
-    motor_drv_state_t right_st; /* 右轮同拍状态快照 */
+    bsp_motor_state_t left_st;  /* 左轮同拍状态快照 */
+    bsp_motor_state_t right_st; /* 右轮同拍状态快照 */
     platform_err_t err;         /* 底层读取结果 */
 
     if (left_tick == NULL || right_tick == NULL) {
@@ -68,11 +68,11 @@ platform_err_t motor_port_get_ticks(int64_t *left_tick,
         return PLATFORM_ERR_NOT_INITIALIZED;
     }
 
-    err = drv_adapter_motor_get_state(g_port_cfg.left_id, &left_st);
+    err = bsp_motor_get_state(g_port_cfg.left_id, &left_st);
     if (PLATFORM_IS_ERR(err)) {
         return err;
     }
-    err = drv_adapter_motor_get_state(g_port_cfg.right_id, &right_st);
+    err = bsp_motor_get_state(g_port_cfg.right_id, &right_st);
     if (PLATFORM_IS_ERR(err)) {
         return err;
     }

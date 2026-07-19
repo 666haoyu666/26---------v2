@@ -24,19 +24,21 @@
 #define TRACK_YAW_HALF_DEG         180.0f /* 航向角半周期，deg */
 #define TRACK_PI_RAD               3.14159265358979323846f /* 圆周率 */
 #define TRACK_RAD_PER_DEG          (TRACK_PI_RAD / 180.0f) /* deg转rad */
-#define TRACK_K1_ERR               0.0f   /* 回线增益(deg/s)/mm，待整定 */
+#define TRACK_K1_ERR               2.0f   /* 回线增益(deg/s)/mm，待整定 */
 #define TRACK_K2_YAW               0.0f   /* 锁向增益(deg/s)/deg，待整定 */
 #define TRACK_WHEEL_DIST_MM        135.0f /* 左右轮距mm，待实车标定 */
 #define TRACK_SENSOR_TO_WHEEL_MM   160.0f /* 前传感器到后轮轴距离 */
 
-#define TRACK_TURN_LINEAR_VEL_COMP 0.0f   /* 原地转弯时的补偿量 */
+#define TRACK_TURN_LINEAR_VEL_COMP -1.0f   /* 原地转弯时的补偿量 */
 
-#define TRACK_TURN_KP              10.0f   /* 转向比例(deg/s)/deg，待整定 */
+#define TRACK_TURN_KP              4.0f   /* 转向比例(deg/s)/deg，待整定 */
 #define TRACK_TURN_KI              0.0f   /* 转向积分，0即纯PD，待整定 */
-#define TRACK_TURN_KD              3.5f   /* 转向微分增益，待整定 */
+#define TRACK_TURN_KD              0.2f   /* 转向微分增益，待整定 */
 #define TRACK_TURN_W_MAX_DEG_S     360.0f /* 转向角速度限幅，待整定 */
 #define TRACK_TURN_I_MAX_DEG_S     20.0f  /* 转向积分项限幅，待整定 */
 #define TRACK_PID_DT_S (SERVER_CTRL_PERIOD_MS / 1000.0f) /* 控制周期，s */
+
+#define TRACK_W_MAX 120.0f
 
 /** 位置式PID参数与运行状态。 */
 typedef struct {
@@ -213,6 +215,11 @@ static void track_apply_motion(float v_mm_s, float w_deg_s,
 {
     float diff_mm_s; /* 单侧差速分量，mm/s */
 
+    if (TRACK_W_MAX < w_deg_s)
+    {
+        w_deg_s = TRACK_W_MAX;
+    }
+    
     /* 顺时针(w>0)转向时左轮在外圈，左加右减 */
     diff_mm_s = w_deg_s * TRACK_RAD_PER_DEG *
                 (TRACK_WHEEL_DIST_MM * 0.5f);
@@ -363,7 +370,7 @@ static void server_track_ctrl_task(void *argument)
                 break;
             case TRACK_CTRL_MODE_TRACK:
                 /* 纯巡线模式：仅PID跟线 */
-
+                track_apply_motion(0 ,180 ,&left_cmd, &right_cmd);
                 break;
             case TRACK_CTRL_MODE_TURN:
                 /* 转向模式：航向误差位置式PID解算转向角速度 */

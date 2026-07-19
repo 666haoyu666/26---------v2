@@ -1,473 +1,282 @@
 /**
  * @file    bsp_motor_driver.c
- * @brief   编码器电机对象实现
- * @author  bojing
+ * @brief   编码器直流电机闭环Driver实现
+ * @note    uint16_t回绕差值要求单周期计数变化不超过32767。
  */
 
 #include "bsp_motor_driver.h"
 
-static motor_dir_t motor_pick_dir(motor_dir_t base_dir, uint8_t negative)
-{
-    if (negative == 0U)
-    {
-        /* 正输出方向(默认方向) */
-        return base_dir;
-    }
+#include <stddef.h>
 
-    /* 负输出方向(默认方向反向) */
-    return (base_dir == MOTOR_DIR_CW)
-         ? MOTOR_DIR_CCW
-         : MOTOR_DIR_CW;
+#define MOTOR_ZERO_RPS (0.0001f) /* 目标停转判定阈值 */
+
+/** @brief 判断浮点数是否为有限值 */
+static uint8_t float_valid(float value)
+{
+    return ((value - value) == 0.0f) ? 1U : 0U;
 }
 
-/**
- * @brief  实例化单电机对象
- *
- * @param  motor         电机对象指针
- * @param  pf_set_enable 底层电机使能接口
- * @param  pf_set_output 底层PWM输出接口
- * @param  dir           电机默认旋转方向
- * @param  pwm_max       最大PWM值
- * @retval MOTOR_OK             实例化成功
- * @retval MOTOR_ERRORPARAMETER 参数错误
- */
-motor_status_t motor_driver_inst(
-    motor_driver_t *const motor,    
-    bsp_motor_set_enable_t pf_set_enable,
-    bsp_motor_set_output_t pf_set_output,
-    motor_dir_t dir,
-    uint16_t pwm_max)
+/** @brief 选择带符号输出对应的物理方向 */
+static motor_dir_t pick_dir(motor_dir_t fwd_dir, int32_t duty)
 {
-    motor_status_t ret = MOTOR_OK;
-
-    if (motor == NULL || pf_set_enable == NULL || pf_set_output == NULL)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERRORPARAMETER\r\n");
-#endif // DEBUG        
-        return MOTOR_ERRORPARAMETER;
+    if (duty >= 0) {
+        return fwd_dir;
     }
-
-    if (dir != MOTOR_DIR_CW && dir != MOTOR_DIR_CCW)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERRORPARAMETER\r\n");
-#endif // DEBUG
-        return MOTOR_ERRORPARAMETER;
-    }
-
-    motor->is_enabled = 0;
-
-    motor->output = 0;
-    motor->dir = dir;
-    motor->pwm_max= pwm_max;
-
-    motor->pf_set_enable = pf_set_enable;
-    motor->pf_set_output = pf_set_output;
-
-    motor->is_inited = 1;
-
-    return ret;
+    return (fwd_dir == MOTOR_DIR_CW) ? MOTOR_DIR_CCW : MOTOR_DIR_CW;
 }
 
-/**
- * @brief  使能单电机对象
- * @param  motor 电机对象
- * @param  enable 1：使能，0：失能
- * @retval MOTOR_OK / MOTOR_ERROR / MOTOR_ERRORPARAMETER
- */
-motor_status_t motor_driver_enable(
-    motor_driver_t *const motor, 
-    uint8_t enable)
+/** @brief 更新编码器位置与速度 */
+static void encoder_update(motor_core_t *motor, uint16_t ticks)
 {
-    motor_status_t ret = MOTOR_OK;
+    int16_t raw_delta; /* 16位回绕后的原始增量 */
+    int32_t delta;     /* 方向修正后的本拍增量 */
 
-    if (motor == NULL)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERRORPARAMETER\r\n");
-#endif // DEBUG
-        return MOTOR_ERRORPARAMETER;
+    if (motor->first_tick != 0U) {
+        motor->last_ticks = ticks;
+        motor->first_tick = 0U;
+        return;
     }
 
-    if (!motor->is_inited)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERROR\r\n");
-#endif // DEBUG
-        return MOTOR_ERROR;
+    raw_delta = (int16_t)(uint16_t)(ticks - motor->last_ticks);
+    motor->last_ticks = ticks;
+    delta = (int32_t)raw_delta * (int32_t)motor->cfg.enc_sign;
+    motor->position += delta;
+    motor->raw_rps = (float)delta /
+                     ((float)motor->cfg.enc_cpr * motor->cfg.sample_s);
+
+    if (motor->speed_ready == 0U) {
+        motor->speed_rps = motor->raw_rps;
+        motor->speed_ready = 1U;
+    } else {
+        motor->speed_rps += motor->cfg.filter *
+                            (motor->raw_rps - motor->speed_rps);
     }
-
-    if (enable != 0U)
-    {
-        /* 每次重新启动时清除旧积分 */
-        (void)motor_pid_reset(&motor->pid);
-    }    
-
-    ret=motor->pf_set_enable(enable);
-    if(ret != MOTOR_OK)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERROR\r\n");
-#endif // DEBUG
-        return ret;
-    }
-
-    motor->is_enabled = enable;    
-
-    return ret;
 }
 
-
-/**
- * @brief  设置电机输出方向和PWM
- *
- * @param  motor         电机对象指针
- * @param  output        0>正转，<0反转
- *
- * @retval MOTOR_OK             操作成功
- * @retval MOTOR_ERROR          底层接口执行失败
- * @retval MOTOR_ERRORPARAMETER 参数错误
- */
-motor_status_t motor_driver_set_output(
-    motor_driver_t *const motor,
-    int16_t output)
+/** @brief 将带符号控制量应用到硬件 */
+static motor_status_t apply_output(motor_core_t *motor, int32_t duty)
 {
-    motor_status_t ret = MOTOR_OK;
+    motor_dir_t dir; /* 最终物理旋转方向 */
+    uint16_t pwm;    /* 最终无符号PWM */
 
-    motor_dir_t actual_dir;    /* 实际输出方向 */
-    uint16_t pwm;              /* 实际PWM输出值 */
-    int32_t limited_output;    /* 实际output输出 */ 
-    if (motor == NULL )
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERRORPARAMETER\r\n");
-#endif // DEBUG
-        return MOTOR_ERRORPARAMETER;
+    if (duty > (int32_t)motor->cfg.pwm_max) {
+        duty = (int32_t)motor->cfg.pwm_max;
+    } else if (duty < -(int32_t)motor->cfg.pwm_max) {
+        duty = -(int32_t)motor->cfg.pwm_max;
     }
 
-    if (!motor->is_inited)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERROR\r\n");
-#endif // DEBUG
-        return MOTOR_ERROR;
+    dir = pick_dir(motor->cfg.fwd_dir, duty);
+    pwm = (duty < 0) ? (uint16_t)(-duty) : (uint16_t)duty;
+    if (motor->hw->pf_output(motor->hw->ctx, dir, pwm) != MOTOR_OK) {
+        return MOTOR_ERR_HW;
     }
 
-    if (!motor->is_enabled)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERROR\r\n");
-#endif // DEBUG
-        return MOTOR_ERROR;
-    }
-
-    limited_output=(int32_t)output;
-
-    /* 输出限幅 */
-    if (limited_output > (int32_t)motor->pwm_max)
-    {
-        limited_output = (int32_t)motor->pwm_max;
-    }
-    else if (limited_output < -(int32_t)motor->pwm_max)
-    {
-        limited_output = -(int32_t)motor->pwm_max;
-    }
-
-    actual_dir = motor_pick_dir(
-        motor->dir, 
-        (limited_output < 0) ? 1U : 0U);
-
-    if (limited_output<0)
-    {
-        pwm=(uint16_t)(-limited_output);
-    }
-    else{
-        pwm=(uint16_t)limited_output;
-    }
-        
-
-    ret=motor->pf_set_output(actual_dir, pwm);
-    if(ret != MOTOR_OK)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERROR\r\n");
-#endif // DEBUG
-        return ret;
-    }
-
-    motor->output = (int16_t)limited_output;
-
-    return ret;
+    motor->duty = duty;
+    return MOTOR_OK;
 }
 
-
-/**
- * @brief 设置电机目标速度
- *
- * @param motor             电机对象
- * @param target_speed_rps  目标输出轴速度，单位：转/秒
- *
- * target_speed_rps > 0：逻辑正向
- * target_speed_rps < 0：逻辑反向
- * target_speed_rps = 0：目标停止
- */
-motor_status_t motor_driver_set_target_speed(
-    motor_driver_t *const motor,
-    float target_speed_rps)
+motor_status_t motor_core_init(motor_core_t *motor,
+                               const motor_hw_if_t *hw,
+                               const motor_core_cfg_t *cfg)
 {
-    motor_status_t ret = MOTOR_OK;
-
-    if (motor == NULL)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERRORPARAMETER\r\n");  
-#endif // DEBUG
-        return MOTOR_ERRORPARAMETER;
+    if ((motor == NULL) || (hw == NULL) || (cfg == NULL) ||
+        (hw->pf_output == NULL)) {
+        return MOTOR_ERR_PARAM;
+    }
+    if (((cfg->fwd_dir != MOTOR_DIR_CW) &&
+         (cfg->fwd_dir != MOTOR_DIR_CCW)) ||
+        ((cfg->enc_sign != 1) && (cfg->enc_sign != -1)) ||
+        (cfg->pwm_max == 0U) || (cfg->enc_cpr == 0U) ||
+        (float_valid(cfg->sample_s) == 0U) ||
+        (float_valid(cfg->filter) == 0U) ||
+        (cfg->sample_s <= 0.0f) ||
+        (cfg->filter < 0.0f) || (cfg->filter > 1.0f)) {
+        return MOTOR_ERR_PARAM;
     }
 
-    if (!motor->is_inited)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERROR\r\n");
-#endif // DEBUG
-        return MOTOR_ERROR;
+    motor->hw          = hw;
+    motor->cfg         = *cfg;
+    motor->target_rps  = 0.0f;
+    motor->speed_rps   = 0.0f;
+    motor->raw_rps     = 0.0f;
+    motor->position    = 0;
+    motor->duty        = 0;
+    motor->last_ticks  = 0U;
+    motor->enabled     = 0U;
+    motor->first_tick  = 1U;
+    motor->speed_ready = 0U;
+    if (motor_pid_init(&motor->pid, &cfg->pid_cfg,
+                       cfg->sample_s, (float)cfg->pwm_max) != PID_OK) {
+        return MOTOR_ERR_PARAM;
     }
 
-    /*
-     * 以下情况复位PID（启用时需先读取旧目标old_target）：
-     * 1. 新目标为停止；
-     * 2. 正转切换为反转；
-     * 3. 反转切换为正转。
-     */
-//    if (((target_speed_rps > -0.001f) &&
-//         (target_speed_rps < 0.001f)) ||
-
-//        ((old_target > 0.001f) &&
-//         (target_speed_rps < -0.001f)) ||
-
-//        ((old_target < -0.001f) &&
-//         (target_speed_rps > 0.001f)))
-//    {
-//        (void)motor_pid_reset(&motor->pid);
-//    }
-
-    motor->target_speed_rps = target_speed_rps;
-
-    return ret;
+    motor->inited = 1U;
+    return MOTOR_OK;
 }
 
-/**
- * @brief  周期更新编码器速度和位置
- * 
- * @param  motor 电机对象指针
- * 
- * @retval MOTOR_OK             操作成功
- * @retval MOTOR_ERROR          底层接口执行失败
- * @retval MOTOR_ERRORPARAMETER 参数错误
- */
-motor_status_t motor_driver_encoder_update(
-    motor_driver_t *const motor)
+motor_status_t motor_core_start(motor_core_t *motor)
 {
-    motor_status_t ret = MOTOR_OK;
-	
-    if (motor == NULL)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERRORPARAMETER\r\n");  
-#endif // DEBUG        
-        return MOTOR_ERRORPARAMETER;
+    motor_status_t err; /* 安全清零输出结果 */
+
+    if (motor == NULL) {
+        return MOTOR_ERR_PARAM;
+    }
+    if (motor->inited == 0U) {
+        return MOTOR_ERR_STATE;
+    }
+    if (motor->enabled != 0U) {
+        return MOTOR_OK;
     }
 
-    if (!motor->is_inited)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERROR\r\n");
-#endif // DEBUG        
-        return MOTOR_ERROR;
+    err = apply_output(motor, 0);
+    if (err != MOTOR_OK) {
+        return err;
+    }
+    if (motor_pid_reset(&motor->pid) != PID_OK) {
+        return MOTOR_ERR_STATE;
     }
 
-    if (!motor->is_enabled)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERROR\r\n");
-#endif // DEBUG        
-        return MOTOR_ERROR;
-    }
-
-    encoder_status_t rets =encoder_update(&motor->encoder);
-    if(rets != ENCODER_OK)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERROR\r\n");
-#endif // DEBUG
-        return MOTOR_ERROR;
-    }
-
-    return ret;
+    motor->enabled = 1U;
+    return MOTOR_OK;
 }
 
-/**
- * @brief  PID计算，更新电机输出PWM
- * 
- * @param  motor 电机对象指针
- * 
- * @retval MOTOR_OK             操作成功
- * @retval MOTOR_ERROR          底层接口执行失败
- * @retval MOTOR_ERRORPARAMETER 参数错误
- */   
-motor_status_t motor_driver_pid_update(
-    motor_driver_t *const motor)
+motor_status_t motor_core_stop(motor_core_t *motor)
 {
-    float pid_output;
-    int16_t motor_output;
+    motor_status_t err; /* 输出清零结果 */
 
-    const float target_zero_epsilon = 0.001f;
-    const float reverse_speed_threshold = 0.10f;
-
-    if (motor == NULL)
-    {
-        return MOTOR_ERRORPARAMETER;
+    if (motor == NULL) {
+        return MOTOR_ERR_PARAM;
+    }
+    if (motor->inited == 0U) {
+        return MOTOR_ERR_STATE;
     }
 
-    if ((motor->is_inited == 0U) ||
-        (motor->is_enabled == 0U))
-    {
-        return MOTOR_ERROR;
-    }
-
-    // /*
-    //  * 目标速度为0：
-    //  * 停止电机并清除PID状态。
-    //  */
-    // if ((motor->target_speed_rps < target_zero_epsilon) &&
-    //     (motor->target_speed_rps > -target_zero_epsilon))
-    // {
-    //     (void)motor_pid_reset(&motor->pid);
-
-    //     return motor_driver_set_output(
-    //         motor,
-    //         0);
-    // }
-
-    // /*
-    //  * 安全换向：
-    //  *
-    //  * 目标要求反转，但电机仍明显正转；
-    //  * 或目标要求正转，但电机仍明显反转。
-    //  *
-    //  * 此时先断开PWM，让电机减速到接近0。
-    //  */
-    // if (((motor->target_speed_rps < 0.0f) &&
-    //      (motor->encoder.speed_rps >
-    //       reverse_speed_threshold)) ||
-
-    //     ((motor->target_speed_rps > 0.0f) &&
-    //      (motor->encoder.speed_rps <
-    //       -reverse_speed_threshold)))
-    // {
-    //     (void)motor_pid_reset(&motor->pid);
-
-    //     return motor_driver_set_output(
-    //         motor,
-    //         0);
-    // }
-
-    /* 计算PID */
-    pid_output = motor_pid_calculate(
-        &motor->pid,
-        motor->target_speed_rps,
-        motor->encoder.speed_rps);
-
-    /*
-     * 目标正转时，只允许正输出；
-     * 目标反转时，只允许负输出。
-     */
-//    if ((motor->target_speed_rps > 0.0f) &&
-//        (pid_output < 0.0f))
-//    {
-//        pid_output = 0.0f;
-//    }
-//    else if ((motor->target_speed_rps < 0.0f) &&
-//             (pid_output > 0.0f))
-//    {
-//        pid_output = 0.0f;
-//    }
-
-    /* PWM限幅 */
-    if (pid_output > (float)motor->pwm_max)
-    {
-        pid_output = (float)motor->pwm_max;
-    }
-    else if (pid_output <
-             -(float)motor->pwm_max)
-    {
-        pid_output =
-            -(float)motor->pwm_max;
-    }
-
-    motor_output = (int16_t)pid_output;
-
-    return motor_driver_set_output(
-        motor,
-        motor_output);
-}
-
-/**
- * @brief  设置电机停止
- * @param  motor 电机对象
- * @retval MOTOR_OK / MOTOR_ERROR / MOTOR_ERRORPARAMETER
- */
-motor_status_t motor_driver_stop(
-    motor_driver_t *motor)
-{
-    motor_status_t ret = MOTOR_OK;
-
-    if (motor == NULL)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERRORPARAMETER\r\n");
-#endif // DEBUG
-        return MOTOR_ERRORPARAMETER;
-    }
-
-    if (!motor->is_inited)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERROR\r\n");
-#endif // DEBUG
-        return MOTOR_ERROR;
-    }
-
-    if (!motor->is_enabled)
-    {
-#ifdef DEBUG
-        DEBUG_OUT("MOTOR_ERROR\r\n");
-#endif // DEBUG
-        return MOTOR_ERROR;
-    }    
-
-    /* 先将PWM输出设置为0 */
-    ret = motor->pf_set_output(motor->dir, 0U);
-    if (ret != MOTOR_OK)
-    {
-        return ret;
-    }
-
-    /* 再关闭驱动 */
-    ret = motor->pf_set_enable(0U);
-    if (ret != MOTOR_OK)
-    {
-        return ret;
-    }
-
-    motor->is_enabled = 0;
-    motor->output = 0;
-
-    motor->target_speed_rps = 0.0f;
-
-    /* 清除位置式PID的误差、积分和输出 */
+    err = apply_output(motor, 0);
+    motor->enabled    = 0U;
+    motor->target_rps = 0.0f;
     (void)motor_pid_reset(&motor->pid);
+    return err;
+}
 
-    return ret;
+motor_status_t motor_core_set_rps(motor_core_t *motor, float rps)
+{
+    if ((motor == NULL) || (float_valid(rps) == 0U)) {
+        return MOTOR_ERR_PARAM;
+    }
+    if (motor->inited == 0U) {
+        return MOTOR_ERR_STATE;
+    }
+
+    motor->target_rps = rps;
+    return MOTOR_OK;
+}
+
+motor_status_t motor_core_set_pid(motor_core_t *motor,
+                                  const motor_pid_cfg_t *cfg)
+{
+    if ((motor == NULL) || (cfg == NULL)) {
+        return MOTOR_ERR_PARAM;
+    }
+    if (motor->inited == 0U) {
+        return MOTOR_ERR_STATE;
+    }
+    return (motor_pid_set(&motor->pid, cfg) == PID_OK)
+         ? MOTOR_OK : MOTOR_ERR_PARAM;
+}
+
+motor_status_t motor_core_get_pid(const motor_core_t *motor,
+                                  motor_pid_cfg_t *cfg)
+{
+    if ((motor == NULL) || (cfg == NULL)) {
+        return MOTOR_ERR_PARAM;
+    }
+    if (motor->inited == 0U) {
+        return MOTOR_ERR_STATE;
+    }
+    return (motor_pid_get(&motor->pid, cfg) == PID_OK)
+         ? MOTOR_OK : MOTOR_ERR_STATE;
+}
+
+motor_status_t motor_core_set_filt(motor_core_t *motor, float filter)
+{
+    if ((motor == NULL) || (float_valid(filter) == 0U) ||
+        (filter < 0.0f) || (filter > 1.0f)) {
+        return MOTOR_ERR_PARAM;
+    }
+    if (motor->inited == 0U) {
+        return MOTOR_ERR_STATE;
+    }
+
+    motor->cfg.filter = filter;
+    motor->speed_rps = motor->raw_rps;
+    motor->speed_ready = 1U;
+    return MOTOR_OK;
+}
+
+motor_status_t motor_core_get_filt(const motor_core_t *motor,
+                                   float *filter)
+{
+    if ((motor == NULL) || (filter == NULL)) {
+        return MOTOR_ERR_PARAM;
+    }
+    if (motor->inited == 0U) {
+        return MOTOR_ERR_STATE;
+    }
+
+    *filter = motor->cfg.filter;
+    return MOTOR_OK;
+}
+
+motor_status_t motor_core_update(motor_core_t *motor, uint16_t ticks)
+{
+    float pid_out;  /* PID浮点输出 */
+    int32_t duty;   /* 四舍五入后的带符号PWM */
+
+    if (motor == NULL) {
+        return MOTOR_ERR_PARAM;
+    }
+    if (motor->inited == 0U) {
+        return MOTOR_ERR_STATE;
+    }
+
+    encoder_update(motor, ticks);
+    if (motor->enabled == 0U) {
+        return MOTOR_OK;
+    }
+
+    if ((motor->target_rps < MOTOR_ZERO_RPS) &&
+        (motor->target_rps > -MOTOR_ZERO_RPS)) {
+        (void)motor_pid_reset(&motor->pid);
+        return apply_output(motor, 0);
+    }
+    if (motor_pid_step(&motor->pid, motor->target_rps,
+                       motor->speed_rps, &pid_out) != PID_OK) {
+        return MOTOR_ERR_STATE;
+    }
+
+    duty = (pid_out >= 0.0f) ? (int32_t)(pid_out + 0.5f)
+                              : (int32_t)(pid_out - 0.5f);
+    return apply_output(motor, duty);
+}
+
+motor_status_t motor_core_get_state(const motor_core_t *motor,
+                                    motor_core_state_t *state)
+{
+    if ((motor == NULL) || (state == NULL)) {
+        return MOTOR_ERR_PARAM;
+    }
+    if (motor->inited == 0U) {
+        return MOTOR_ERR_STATE;
+    }
+
+    state->target_rps = motor->target_rps;
+    state->speed_rps  = motor->speed_rps;
+    state->raw_rps    = motor->raw_rps;
+    state->p_term     = motor->pid.p_term;
+    state->i_term     = motor->pid.integral;
+    state->ff_term    = motor->pid.ff_term;
+    state->position   = motor->position;
+    state->duty       = motor->duty;
+    state->enabled    = motor->enabled;
+    return MOTOR_OK;
 }
